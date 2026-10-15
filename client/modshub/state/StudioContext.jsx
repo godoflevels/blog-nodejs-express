@@ -424,6 +424,7 @@ export function StudioProvider({ children }) {
         tags: [],
         content: '',
         image: null,
+        images: [],
         notes: '',
         discord: null,
         createdBy: '',
@@ -470,6 +471,7 @@ export function StudioProvider({ children }) {
         status: 'draft',
         tags: [...src.tags],
         image: src.image ? { ...src.image } : null,
+        images: (src.images || []).map((i) => ({ ...i })),
         revision: null,
         createdAt: now,
         updatedAt: now,
@@ -711,17 +713,22 @@ export function StudioProvider({ children }) {
       // Embedded data: URLs are uploaded as assets first.
       const prepared = [];
       for (const item of items) {
-        let image = item.image;
-        if (image && image.src && image.src.startsWith('data:')) {
-          try {
-            const blob = await (await fetch(image.src)).blob();
-            const src = await uploadImage(blob);
-            image = src ? { src, alt: image.alt || '' } : null;
-          } catch (_) {
-            image = null;
+        const list = item.images && item.images.length ? item.images : item.image ? [item.image] : [];
+        const images = [];
+        for (const img of list) {
+          if (img && img.src && img.src.startsWith('data:')) {
+            try {
+              const blob = await (await fetch(img.src)).blob();
+              const src = await uploadImage(blob);
+              if (src) images.push({ src, alt: img.alt || '' });
+            } catch (_) {
+              /* an unreadable embedded image is dropped */
+            }
+          } else if (img) {
+            images.push(img);
           }
         }
-        prepared.push({ ...item, image });
+        prepared.push({ ...item, images, image: images[0] || null });
       }
       const summary = { created: 0, updated: 0, skipped: 0, invalid: 0 };
       for (let i = 0; i < prepared.length; i += schema.LIMITS.postsPerRequest) {

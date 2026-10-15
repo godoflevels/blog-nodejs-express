@@ -72,6 +72,7 @@ function wirePost(post) {
     tags: post.tags,
     content: post.content,
     image: post.image,
+    images: post.images || (post.image ? [post.image] : []),
     notes: post.notes,
     discord: post.discord || null,
     createdAt: post.createdAt || undefined,

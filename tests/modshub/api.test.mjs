@@ -268,6 +268,45 @@ test('asset ?download=1 sends a download header with the original name', async (
   assert.deepEqual(Buffer.from(await dl.arrayBuffer()), PNG_1PX);
 });
 
+test('several images per post: validated, legacy image mapped, assets cleaned up per image', async () => {
+  const mk = async () => (await call('POST', '/api/assets', { raw: PNG_1PX, headers: { 'content-type': 'image/png' } })).json.src;
+  const [a, b, c] = [await mk(), await mk(), await mk()];
+
+  const saved = await call('PUT', '/api/posts/p-multi', {
+    body: { post: mkPost({ images: [{ src: a, alt: 'one' }, { src: b, alt: 'two' }, { src: c, alt: '' }] }), baseRevision: null },
+  });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.json.post.images.map((i) => i.src), [a, b, c]);
+  assert.equal(saved.json.post.image.src, a, 'image is the first attachment');
+
+  // dropping two of them removes only those assets
+  const trimmed = await call('PUT', '/api/posts/p-multi', { body: { post: mkPost({ images: [{ src: b, alt: 'two' }] }), baseRevision: 1 } });
+  assert.deepEqual(trimmed.json.post.images.map((i) => i.src), [b]);
+  assert.equal(trimmed.json.post.image.src, b);
+  const get = (src) => fetch(base.replace('/modshub', '') + src, { headers: { cookie: ALICE } });
+  assert.equal((await get(a)).status, 404);
+  assert.equal((await get(c)).status, 404);
+  assert.equal((await get(b)).status, 200);
+
+  // an older client that only knows `image`
+  const legacy = await call('PUT', '/api/posts/p-legacy', { body: { post: mkPost({ image: { src: 'https://example.com/x.png', alt: 'x' } }), baseRevision: null } });
+  assert.deepEqual(legacy.json.post.images, [{ src: 'https://example.com/x.png', alt: 'x' }]);
+
+  // limits and missing assets
+  const many = await call('PUT', '/api/posts/p-many', {
+    body: { post: mkPost({ images: Array.from({ length: 11 }, (_, i) => ({ src: `https://example.com/${i}.png` })) }), baseRevision: null },
+  });
+  assert.equal(many.status, 422);
+  const missing = await call('PUT', '/api/posts/p-miss', {
+    body: { post: mkPost({ images: [{ src: '/modshub/api/assets/' + 'b'.repeat(24) }] }), baseRevision: null },
+  });
+  assert.equal(missing.status, 422);
+
+  // deleting the post cleans up what is left
+  await call('DELETE', '/api/posts/p-multi');
+  assert.equal((await get(b)).status, 404);
+});
+
 test('delete is idempotent', async () => {
   assert.equal((await call('DELETE', '/api/posts/never-existed')).status, 200);
 });

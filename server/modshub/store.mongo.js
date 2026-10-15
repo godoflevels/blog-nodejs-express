@@ -28,6 +28,7 @@ const PostSchema = new Schema(
     tags: { type: [String], default: [] },
     content: { type: String, default: '' },
     image: { type: new Schema({ src: String, alt: String }, { _id: false }), default: null },
+    images: { type: [new Schema({ src: String, alt: String }, { _id: false })], default: [] },
     notes: { type: String, default: '' },
     discord: { type: Schema.Types.Mixed, default: null },
     createdBy: { type: String, default: '' },
@@ -90,6 +91,11 @@ function models(connection) {
   };
 }
 
+function imageList(doc) {
+  const list = doc.images && doc.images.length ? doc.images : doc.image && doc.image.src ? [doc.image] : [];
+  return list.filter((i) => i && i.src).map((i) => ({ src: i.src, alt: i.alt || '' }));
+}
+
 function toApi(doc) {
   if (!doc) return null;
   return {
@@ -101,7 +107,9 @@ function toApi(doc) {
     category: doc.category || '',
     tags: Array.isArray(doc.tags) ? [...doc.tags] : [],
     content: doc.content || '',
-    image: doc.image && doc.image.src ? { src: doc.image.src, alt: doc.image.alt || '' } : null,
+    // Posts saved before multi-image support only have `image`.
+    image: imageList(doc)[0] || null,
+    images: imageList(doc),
     notes: doc.notes || '',
     discord: doc.discord || null,
     createdBy: doc.createdBy || '',
@@ -133,7 +141,8 @@ function editableFields(post) {
     category: post.category,
     tags: post.tags,
     content: post.content,
-    image: post.image,
+    image: (post.images && post.images[0]) || post.image || null,
+    images: post.images || (post.image ? [post.image] : []),
     notes: post.notes,
     discord: post.discord || null,
   };
@@ -243,7 +252,7 @@ function createMongoStore(connection) {
     },
 
     async countImageRefs(ownerId, src) {
-      return Post.countDocuments({ ownerId, 'image.src': src });
+      return Post.countDocuments({ ownerId, $or: [{ 'image.src': src }, { 'images.src': src }] });
     },
 
     async getSettings(ownerId) {

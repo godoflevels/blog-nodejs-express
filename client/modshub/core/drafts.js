@@ -7,7 +7,7 @@
  */
 
 const PREFIX = 'modshub:v1:draft:';
-const FIELDS = ['title', 'scheduledAt', 'timezone', 'status', 'category', 'tags', 'content', 'image', 'notes', 'discord'];
+const FIELDS = ['title', 'scheduledAt', 'timezone', 'status', 'category', 'tags', 'content', 'image', 'images', 'notes', 'discord'];
 
 export function sameEditableContent(a, b) {
   if (!a || !b) return false;

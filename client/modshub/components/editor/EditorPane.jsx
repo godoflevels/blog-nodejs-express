@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { Button, IconButton, Icon, Menu, Modal, StatusPill, useMedia } from '../ui.jsx';
 import MetaFields from './MetaFields.jsx';
-import { downloadPostImage } from '../../core/download-image.js';
+import { postImages, runImageDownload } from '../../core/download-image.js';
 import MessageComposer from '../discord/MessageComposer.jsx';
 import JsonEditor from '../discord/JsonEditor.jsx';
 import { DiscordIssues } from '../preview/PreviewPane.jsx';
@@ -72,19 +72,15 @@ export default function EditorPane({ post, onBack }) {
         <Button variant="primary" size="sm" icon="copy" className="ms-editor__copy" data-testid="copy-text" onClick={() => actions.copyPost(post)}>
           Copy text
         </Button>
-        {post.image ? (
+        {postImages(post).length ? (
           <Button
             variant="soft"
             size="sm"
             icon="download"
             data-testid="download-image-header"
-            onClick={async () => {
-              const r = await downloadPostImage(post);
-              if (r.ok) toast('Image downloaded');
-              else if (r.opened) toast('Opened the image in a new tab — use “Save image as…” there', 'info');
-            }}
+            onClick={() => runImageDownload(post, toast)}
           >
-            Image
+            {postImages(post).length > 1 ? `Images (${postImages(post).length})` : 'Image'}
           </Button>
         ) : null}
         <Menu

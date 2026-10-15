@@ -110,9 +110,15 @@ export function messageHtml(post, env = {}) {
   const initial = esc([...name][0] || 'M').toUpperCase();
   const content = post.content ? `<div class="dc-content">${contentHtml(post.content, env)}</div>` : '';
   const embeds = ((d.embeds || []).map((e) => embedHtml(e, env))).join('');
-  const imageSrc = post.image && post.image.src && /^(https?:\/\/|\/modshub\/)/i.test(post.image.src) ? esc(post.image.src) : '';
-  const attachment = imageSrc
-    ? `<div class="dc-attachment"><img src="${imageSrc}" alt="${esc(post.image.alt || 'Attached image')}"><button type="button" class="dc-attachment__dl" data-dl="1" aria-label="Download image" title="Download image">Download</button></div>`
+  const gallerySources = (Array.isArray(post.images) && post.images.length ? post.images : post.image ? [post.image] : [])
+    .filter((i) => i && /^(https?:\/\/|\/modshub\/)/i.test(i.src || ''));
+  const attachment = gallerySources.length
+    ? `<div class="dc-gallery dc-gallery--${Math.min(gallerySources.length, 5)}">${gallerySources
+        .map(
+          (img, i) =>
+            `<div class="dc-attachment"><img src="${esc(img.src)}" alt="${esc(img.alt || `Attached image ${i + 1}`)}"><button type="button" class="dc-attachment__dl" data-dl="${i}" aria-label="Download image ${i + 1}" title="Download image ${i + 1}">Download</button></div>`
+        )
+        .join('')}</div>`
     : '';
   const html = `<div class="dc-message"><div class="dc-avatar">${
     avatar ? `<img src="${avatar}" alt="">` : `<span>${initial}</span>`

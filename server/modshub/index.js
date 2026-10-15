@@ -189,11 +189,17 @@ function createModshubRouter({
     }
   });
 
+  const imageSrcs = (post) => {
+    const list = (post && Array.isArray(post.images) && post.images.length ? post.images : post && post.image ? [post.image] : []);
+    return list.map((i) => i.src).filter(Boolean);
+  };
+
   async function checkAsset(ownerId, post) {
-    const src = post.image && post.image.src;
-    const m = src && ASSET_PATH_RE.exec(src);
-    if (!m) return true;
-    return store.assetExists(ownerId, m[1]);
+    for (const src of imageSrcs(post)) {
+      const m = ASSET_PATH_RE.exec(src);
+      if (m && !(await store.assetExists(ownerId, m[1]))) return false;
+    }
+    return true;
   }
 
   async function cleanupAsset(ownerId, src) {
@@ -224,8 +230,9 @@ function createModshubRouter({
       if (saved.status === 'conflict') {
         return res.status(409).json({ error: 'conflict', message: 'Post was changed elsewhere', server: saved.server });
       }
-      if (previous && previous.image && (!saved.post.image || previous.image.src !== saved.post.image.src)) {
-        await cleanupAsset(req.ownerId, previous.image.src);
+      if (previous) {
+        const keep = new Set(imageSrcs(saved.post));
+        for (const src of imageSrcs(previous)) if (!keep.has(src)) await cleanupAsset(req.ownerId, src);
       }
       res.json({ post: saved.post });
     } catch (e) {
@@ -239,7 +246,7 @@ function createModshubRouter({
       if (!ID_RE.test(id)) return apiError(res, 400, 'bad_id', 'Invalid post id');
       const previous = await store.getPost(req.ownerId, id);
       await store.deletePost(req.ownerId, id);
-      if (previous && previous.image) await cleanupAsset(req.ownerId, previous.image.src);
+      if (previous) for (const src of imageSrcs(previous)) await cleanupAsset(req.ownerId, src);
       res.json({ ok: true });
     } catch (e) {
       next(e);
@@ -304,7 +311,7 @@ function createModshubRouter({
       }
       if (action === 'delete') {
         const before = await store.listPosts(req.ownerId);
-        const images = before.filter((p) => ids.includes(p.id) && p.image).map((p) => p.image.src);
+        const images = before.filter((p) => ids.includes(p.id)).flatMap((p) => imageSrcs(p));
         const deleted = await store.deleteMany(req.ownerId, ids);
         for (const src of new Set(images)) await cleanupAsset(req.ownerId, src);
         return res.json({ deleted });

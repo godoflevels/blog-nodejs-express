@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
+import { unzipSync } from 'fflate';
 
 const login = async (page, user = 'tester', seed = 0) => {
   await page.request.get('/__reset');
@@ -182,39 +183,73 @@ test('JSON tab: pasting a Discohook message replaces the content', async ({ page
 // 1x1 PNG
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
-test('attach an image: shown in the Discord preview, downloadable in one click', async ({ page }) => {
+test('attach several images: gallery in the preview, each downloads in one click, all as a ZIP', async ({ page }) => {
   await login(page);
   await newPost(page);
-  await type(page, 'Post with a picture');
+  await type(page, 'Post with pictures');
   await expect(page.locator('.dc-attachment')).toHaveCount(0);
-  await page.locator('.ms-attachment input[type=file]').setInputFiles({ name: 'cover shot.png', mimeType: 'image/png', buffer: PNG_1PX });
-  const preview = page.locator('.dc-root .dc-attachment img');
-  await expect(preview).toBeVisible({ timeout: 8000 });
-  await expect(preview).toHaveAttribute('src', /\/modshub\/api\/assets\/[a-f0-9]+$/);
 
-  // one click on the editor button
-  const [d1] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-attachment').click()]);
-  expect(d1.suggestedFilename()).toMatch(/-image\.png$/);
-  expect(fs.readFileSync(await d1.path()).equals(PNG_1PX)).toBe(true);
+  const file = (name) => ({ name, mimeType: 'image/png', buffer: PNG_1PX });
+  await page.locator('.ms-attachment input[type=file]').setInputFiles([file('one.png'), file('two.png'), file('three.png')]);
+  await expect(page.locator('.dc-root .dc-attachment img')).toHaveCount(3, { timeout: 10000 });
+  await expect(page.locator('.ms-attach__item')).toHaveCount(3);
+  await expect(page.locator('.dc-gallery')).toHaveClass(/dc-gallery--3/);
+  for (const img of await page.locator('.dc-root .dc-attachment img').all()) {
+    await expect(img).toHaveAttribute('src', /\/modshub\/api\/assets\/[a-f0-9]+$/);
+  }
 
-  // one click on the button over the preview image
-  await page.locator('.dc-attachment').hover();
-  const [d2] = await Promise.all([page.waitForEvent('download'), page.locator('.dc-attachment__dl').click()]);
-  expect(fs.readFileSync(await d2.path()).equals(PNG_1PX)).toBe(true);
+  // one image, from the editor
+  const [one] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-image-2').click()]);
+  expect(one.suggestedFilename()).toMatch(/-image-2\.png$/);
+  expect(fs.readFileSync(await one.path()).equals(PNG_1PX)).toBe(true);
 
-  // header and export panel shortcuts
-  const [d3] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-image-header').click()]);
-  expect(d3.suggestedFilename()).toMatch(/\.png$/);
-  const [d4] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-attachment-export').click()]);
-  expect(d4.suggestedFilename()).toMatch(/\.png$/);
+  // one image, from the button over it in the preview
+  await page.locator('.dc-attachment').nth(2).hover();
+  const [two] = await Promise.all([page.waitForEvent('download'), page.locator('.dc-attachment__dl').nth(2).click()]);
+  expect(two.suggestedFilename()).toMatch(/-image-3\.png$/);
+
+  // everything as one ZIP: editor button, header button and export panel
+  for (const trigger of [
+    () => page.getByTestId('download-attachment').click(),
+    () => page.getByTestId('download-image-header').click(),
+    () => page.getByTestId('download-attachment-export').click(),
+  ]) {
+    const [zip] = await Promise.all([page.waitForEvent('download'), trigger()]);
+    expect(zip.suggestedFilename()).toMatch(/-images\.zip$/);
+    const entries = unzipSync(new Uint8Array(fs.readFileSync(await zip.path())));
+    const names = Object.keys(entries).sort();
+    expect(names).toHaveLength(3);
+    expect(names[0]).toMatch(/-01\.png$/);
+    expect(Buffer.from(entries[names[2]]).equals(PNG_1PX)).toBe(true);
+  }
 
   await expect(page.locator('.ms-save')).toContainText('Saved', { timeout: 6000 });
-  const data = await bootstrap(page);
-  expect(data.posts[0].image.src).toMatch(/^\/modshub\/api\/assets\//);
+  const saved = (await bootstrap(page)).posts[0];
+  expect(saved.images).toHaveLength(3);
+  expect(saved.image.src).toBe(saved.images[0].src);
 
-  // removing it clears the preview
-  await page.getByRole('button', { name: 'Remove' }).click();
+  // reorder, then remove two
+  const firstSrc = saved.images[0].src;
+  await page.getByRole('button', { name: 'Move image 1 later' }).click();
+  await expect.poll(async () => (await bootstrap(page)).posts[0].images[1].src, { timeout: 6000 }).toBe(firstSrc);
+  await page.getByRole('button', { name: 'Remove image 3' }).click();
+  await page.getByRole('button', { name: 'Remove image 2' }).click();
+  await expect(page.locator('.dc-attachment')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Remove image 1' }).click();
   await expect(page.locator('.dc-attachment')).toHaveCount(0);
+  await expect.poll(async () => (await bootstrap(page)).posts[0].images.length, { timeout: 6000 }).toBe(0);
+});
+
+test('a single attached image downloads straight away, not as a ZIP', async ({ page }) => {
+  await login(page);
+  await newPost(page);
+  await page.locator('.ms-attachment input[type=file]').setInputFiles({ name: 'cover shot.png', mimeType: 'image/png', buffer: PNG_1PX });
+  await expect(page.locator('.dc-root .dc-attachment img')).toHaveCount(1, { timeout: 8000 });
+  const [d] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-attachment').click()]);
+  expect(d.suggestedFilename()).toMatch(/-image\.png$/);
+  expect(fs.readFileSync(await d.path()).equals(PNG_1PX)).toBe(true);
+  const [h] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-image-header').click()]);
+  expect(h.suggestedFilename()).toMatch(/\.png$/);
 });
 
 test('downloads a real PNG with the preset size', async ({ page }) => {

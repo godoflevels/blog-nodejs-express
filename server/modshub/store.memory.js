@@ -23,6 +23,11 @@ const { defaultSettings } = require('./schema');
  * A Post is { id, title, scheduledAt(ISO UTC), timezone, status, category,
  * tags, content, image, notes, revision, createdAt, updatedAt }.
  */
+const imagesOf = (post) => {
+  const list = Array.isArray(post.images) ? post.images : post.image ? [post.image] : [];
+  return list.map((i) => ({ src: i.src, alt: i.alt || '' }));
+};
+
 function createMemoryStore() {
   const posts = new Map(); // ownerId -> Map(id -> post)
   const settings = new Map(); // ownerId -> { data, revision }
@@ -47,7 +52,8 @@ function createMemoryStore() {
       category: post.category || '',
       tags: [...(post.tags || [])],
       content: post.content || '',
-      image: post.image ? { src: post.image.src, alt: post.image.alt || '' } : null,
+      image: imagesOf(post)[0] || null,
+      images: imagesOf(post),
       notes: post.notes || '',
       discord: post.discord ? structuredClone(post.discord) : null,
       revision,
@@ -140,7 +146,9 @@ function createMemoryStore() {
 
     async countImageRefs(ownerId, src) {
       let n = 0;
-      for (const p of bucket(posts, ownerId).values()) if (p.image && p.image.src === src) n += 1;
+      for (const p of bucket(posts, ownerId).values()) {
+        if ((p.images || []).some((i) => i.src === src) || (p.image && p.image.src === src)) n += 1;
+      }
       return n;
     },
 

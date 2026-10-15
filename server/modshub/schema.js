@@ -38,6 +38,7 @@ const LIMITS = Object.freeze({
   dcEmbedTotal: 6000,
   dcContent: 2000,
   slotNote: 200,
+  images: 10,
 });
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -316,7 +317,7 @@ function validatePost(input, opts = {}) {
 
   const known = new Set([
     'id', 'title', 'scheduledAt', 'timezone', 'status', 'category', 'tags',
-    'content', 'image', 'notes', 'createdAt', 'updatedAt', 'revision', 'discord',
+    'content', 'image', 'images', 'notes', 'createdAt', 'updatedAt', 'revision', 'discord',
     'createdBy', 'updatedBy',
   ]);
   for (const key of Object.keys(input)) {
@@ -389,7 +390,24 @@ function validatePost(input, opts = {}) {
   }
   const content = str(input.content, LIMITS.content, `${path}.content`, errors);
 
-  const image = normalizeImage(input.image, `${path}.image`, errors, warnings, opts);
+  // `images` is the attachment list; `image` stays as the first one (cover) so
+  // older clients and exports keep working. Either may be sent.
+  const legacyImage = normalizeImage(input.image, `${path}.image`, errors, warnings, opts);
+  let images = [];
+  if (Array.isArray(input.images)) {
+    if (input.images.length > LIMITS.images) {
+      errors.push({ path: `${path}.images`, message: `has too many images (max ${LIMITS.images})` });
+    }
+    input.images.slice(0, LIMITS.images).forEach((raw, i) => {
+      const n = normalizeImage(raw, `${path}.images[${i}]`, errors, warnings, opts);
+      if (n) images.push(n);
+    });
+  } else if (input.images !== undefined && input.images !== null) {
+    errors.push({ path: `${path}.images`, message: 'must be an array of { src, alt }' });
+  }
+  // An empty list next to a legacy `image` (older export/client): keep the image.
+  if (images.length === 0 && legacyImage) images = [legacyImage];
+  const image = images[0] || null;
   const notes = str(input.notes, LIMITS.notes, `${path}.notes`, errors);
 
   const dateOrNull = (v, key) => {
@@ -418,6 +436,7 @@ function validatePost(input, opts = {}) {
           tags,
           content,
           image,
+          images,
           notes,
           discord,
           createdAt,

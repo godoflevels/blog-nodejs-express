@@ -18,6 +18,10 @@ export function postToExport(post) {
     tags: [...post.tags],
     content: post.content,
     image: post.image ? { src: post.image.src, alt: post.image.alt || '' } : null,
+    images: (post.images && post.images.length ? post.images : post.image ? [post.image] : []).map((i) => ({
+      src: i.src,
+      alt: i.alt || '',
+    })),
     notes: post.notes,
     discord: post.discord || null,
     createdAt: post.createdAt || null,
