@@ -1,7 +1,7 @@
 <h3>Sign In</h3>
 
 <form action="/admin" method="POST">
-  <% if (locals.nextUrl) { %>
+  <% if (typeof nextUrl !== 'undefined' && nextUrl) { %>
   <input type="hidden" name="next" value="<%= nextUrl %>">
   <% } %>
   <label for="username"><b>Username</b></label>
