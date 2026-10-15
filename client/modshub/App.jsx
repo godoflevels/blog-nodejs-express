@@ -9,6 +9,7 @@ import PreviewPane from './components/preview/PreviewPane.jsx';
 import QuickActions from './components/preview/QuickActions.jsx';
 import ImportDialog from './components/dialogs/ImportDialog.jsx';
 import SettingsDialog from './components/dialogs/SettingsDialog.jsx';
+import FreeSlotDialog from './components/dialogs/FreeSlotDialog.jsx';
 import { Button, ConfirmDialog, EmptyState, Icon, IconButton, Toasts, useMedia } from './components/ui.jsx';
 
 function Banner() {
@@ -165,12 +166,13 @@ function Shell() {
   }
 
   return (
-    <div className="ms-app">
+    <div className="ms-app" data-user={s.userName}>
       <TopBar onImport={() => setDialog('import')} onSettings={() => setDialog('settings')} />
       <Banner />
       <Workspace />
       {dialog === 'import' ? <ImportDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'settings' ? <SettingsDialog onClose={() => setDialog(null)} /> : null}
+      <FreeSlotDialog />
       <ConfirmDialog />
       <Toasts />
     </div>

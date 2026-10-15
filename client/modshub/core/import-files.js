@@ -1,5 +1,6 @@
 import { unzipSync } from 'fflate';
 import { parseImport } from './json-io.js';
+import { fromWebhookPayload } from './discord.js';
 
 /**
  * File import (.json, .md, .txt, .zip).
@@ -61,6 +62,17 @@ export function normalizeNewlines(text) {
   return text.replace(/\r\n?/g, '\n');
 }
 
+function tryWebhook(text) {
+  try {
+    const data = JSON.parse(text.replace(/^\uFEFF/, ''));
+    if (!data || typeof data !== 'object' || Array.isArray(data) || 'posts' in data) return null;
+    if (!('content' in data || 'embeds' in data || 'messages' in data)) return null;
+    return fromWebhookPayload(data);
+  } catch (_) {
+    return null;
+  }
+}
+
 const SKIP_ENTRY = /(^|\/)(__MACOSX\/|\.[^/]*$|Thumbs\.db$)/;
 
 /**
@@ -87,7 +99,23 @@ export function parseImportFiles(files, ctx = {}) {
         return;
       }
       const { text } = decodeText(bytes);
-      out.jsons.push({ source, parsed: parseImport(text, ctx) });
+      const parsed = parseImport(text, ctx);
+      if (!parsed.ok) {
+        // A plain Discord webhook / Discohook message is not our export format
+        // but is worth importing as one draft.
+        const webhook = tryWebhook(text);
+        if (webhook) {
+          out.texts.push({
+            source,
+            title: titleFromFilename(source),
+            content: webhook.content,
+            discord: webhook.discord,
+            warning: webhook.notes.length ? webhook.notes.join(' ') : null,
+          });
+          return;
+        }
+      }
+      out.jsons.push({ source, parsed });
     } else if (ext === 'md' || ext === 'markdown' || ext === 'txt') {
       if (bytes.length > IMPORT_LIMITS.textBytes) {
         out.problems.push({ source, message: `Text file is larger than ${IMPORT_LIMITS.textBytes / 1024} KB.` });

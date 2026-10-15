@@ -1,8 +1,8 @@
 import { useRendered } from './hooks.js';
 
 /** Sanitized, rendered Markdown. The only place HTML is injected for previews. */
-export default function Prose({ markdown, className = '', image }) {
-  const { html } = useRendered(markdown);
+export default function Prose({ markdown, className = '', image, discord = null }) {
+  const { html } = useRendered(markdown, discord);
   return (
     <article className={`ms-prose ${className}`}>
       {image && image.src ? (
@@ -10,7 +10,7 @@ export default function Prose({ markdown, className = '', image }) {
           <img src={image.src} alt={image.alt || ''} />
         </figure>
       ) : null}
-      {markdown.trim() ? (
+      {markdown.trim() || (discord && discord.embeds && discord.embeds.length) ? (
         // eslint-disable-next-line react/no-danger
         <div dangerouslySetInnerHTML={{ __html: html }} />
       ) : (

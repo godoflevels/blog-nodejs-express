@@ -25,6 +25,19 @@ const LIMITS = Object.freeze({
   templates: 40,
   categoryName: 40,
   templateName: 60,
+  // Discord message limits (webhook messages)
+  dcUsername: 80,
+  dcEmbeds: 10,
+  dcEmbedTitle: 256,
+  dcEmbedDescription: 4096,
+  dcFields: 25,
+  dcFieldName: 256,
+  dcFieldValue: 1024,
+  dcFooter: 2048,
+  dcAuthor: 256,
+  dcEmbedTotal: 6000,
+  dcContent: 2000,
+  slotNote: 200,
 });
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -135,6 +148,156 @@ function normalizeImage(value, path, errors, warnings, { allowDataUrl = false } 
   }
 }
 
+function httpUrl(value, path, errors, { allowEmpty = true } = {}) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string' || value.length > LIMITS.imageUrl) {
+    errors.push({ path, message: 'must be an https:// URL' });
+    return '';
+  }
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('protocol');
+    return url.href;
+  } catch (_) {
+    errors.push({ path, message: 'must be an https:// URL' });
+    return '';
+  }
+}
+
+function embedText(value, max, path, errors) {
+  if (value === undefined || value === null) return '';
+  if (typeof value !== 'string') {
+    errors.push({ path, message: 'must be a string' });
+    return '';
+  }
+  if (value.length > max) {
+    errors.push({ path, message: `is too long (${value.length} > ${max} characters)` });
+    return value.slice(0, max);
+  }
+  return value;
+}
+
+/** Discord webhook style extras of a post: identity + up to 10 embeds. */
+function normalizeDiscord(input, path, errors, warnings) {
+  if (input === undefined || input === null) return null;
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    errors.push({ path, message: 'must be an object or null' });
+    return null;
+  }
+  const out = {
+    username: embedText(input.username, LIMITS.dcUsername, `${path}.username`, errors),
+    avatarUrl: httpUrl(input.avatarUrl, `${path}.avatarUrl`, errors),
+    embeds: [],
+  };
+  if (input.embeds !== undefined && input.embeds !== null) {
+    if (!Array.isArray(input.embeds)) {
+      errors.push({ path: `${path}.embeds`, message: 'must be an array' });
+    } else {
+      if (input.embeds.length > LIMITS.dcEmbeds) {
+        errors.push({ path: `${path}.embeds`, message: `has too many embeds (max ${LIMITS.dcEmbeds})` });
+      }
+      let total = 0;
+      input.embeds.slice(0, LIMITS.dcEmbeds).forEach((e, i) => {
+        const p = `${path}.embeds[${i}]`;
+        if (!e || typeof e !== 'object' || Array.isArray(e)) {
+          errors.push({ path: p, message: 'must be an object' });
+          return;
+        }
+        let color = null;
+        if (e.color !== undefined && e.color !== null && e.color !== '') {
+          if (typeof e.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(e.color)) color = e.color.toLowerCase();
+          else errors.push({ path: `${p}.color`, message: 'must be a #rrggbb colour' });
+        }
+        const fields = [];
+        if (e.fields !== undefined && e.fields !== null) {
+          if (!Array.isArray(e.fields)) {
+            errors.push({ path: `${p}.fields`, message: 'must be an array' });
+          } else {
+            if (e.fields.length > LIMITS.dcFields) {
+              errors.push({ path: `${p}.fields`, message: `has too many fields (max ${LIMITS.dcFields})` });
+            }
+            e.fields.slice(0, LIMITS.dcFields).forEach((f, j) => {
+              const fp = `${p}.fields[${j}]`;
+              if (!f || typeof f !== 'object') {
+                errors.push({ path: fp, message: 'must be an object' });
+                return;
+              }
+              fields.push({
+                name: embedText(f.name, LIMITS.dcFieldName, `${fp}.name`, errors),
+                value: embedText(f.value, LIMITS.dcFieldValue, `${fp}.value`, errors),
+                inline: Boolean(f.inline),
+              });
+            });
+          }
+        }
+        let timestamp = '';
+        if (e.timestamp) {
+          if (isValidIsoWithOffset(e.timestamp)) timestamp = new Date(e.timestamp).toISOString();
+          else errors.push({ path: `${p}.timestamp`, message: 'must be an ISO 8601 date-time' });
+        }
+        const embed = {
+          color,
+          authorName: embedText(e.authorName, LIMITS.dcAuthor, `${p}.authorName`, errors),
+          authorUrl: httpUrl(e.authorUrl, `${p}.authorUrl`, errors),
+          authorIconUrl: httpUrl(e.authorIconUrl, `${p}.authorIconUrl`, errors),
+          title: embedText(e.title, LIMITS.dcEmbedTitle, `${p}.title`, errors),
+          url: httpUrl(e.url, `${p}.url`, errors),
+          description: embedText(e.description, LIMITS.dcEmbedDescription, `${p}.description`, errors),
+          fields,
+          thumbnailUrl: httpUrl(e.thumbnailUrl, `${p}.thumbnailUrl`, errors),
+          imageUrl: httpUrl(e.imageUrl, `${p}.imageUrl`, errors),
+          footerText: embedText(e.footerText, LIMITS.dcFooter, `${p}.footerText`, errors),
+          footerIconUrl: httpUrl(e.footerIconUrl, `${p}.footerIconUrl`, errors),
+          timestamp,
+        };
+        total += embed.title.length + embed.description.length + embed.footerText.length + embed.authorName.length;
+        embed.fields.forEach((f) => { total += f.name.length + f.value.length; });
+        out.embeds.push(embed);
+      });
+      if (total > LIMITS.dcEmbedTotal) {
+        warnings.push({ path: `${path}.embeds`, message: `embeds total ${total} characters, Discord allows ${LIMITS.dcEmbedTotal} per message` });
+      }
+    }
+  }
+  return out;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A "free place" marker on the shared calendar: a day, optionally a time. */
+function validateSlot(input, opts = {}) {
+  const path = opts.path || 'slot';
+  const errors = [];
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { ok: false, value: null, errors: [{ path, message: 'must be an object' }] };
+  }
+  let id = '';
+  if (typeof input.id !== 'string' || !ID_RE.test(input.id)) errors.push({ path: `${path}.id`, message: 'is required' });
+  else id = input.id;
+  let date = '';
+  if (typeof input.date === 'string' && DATE_RE.test(input.date) && !Number.isNaN(Date.parse(`${input.date}T00:00:00Z`))) {
+    date = input.date;
+  } else {
+    errors.push({ path: `${path}.date`, message: 'must be YYYY-MM-DD' });
+  }
+  let time = '';
+  if (input.time !== undefined && input.time !== null && input.time !== '') {
+    if (typeof input.time === 'string' && TIME_RE.test(input.time)) time = input.time;
+    else errors.push({ path: `${path}.time`, message: 'must be HH:mm or empty' });
+  }
+  let timezone = opts.defaultTimezone || 'UTC';
+  if (input.timezone !== undefined && input.timezone !== null && input.timezone !== '') {
+    if (isValidTimezone(input.timezone)) timezone = input.timezone;
+    else errors.push({ path: `${path}.timezone`, message: 'must be a valid IANA timezone' });
+  }
+  const note = embedText(input.note, LIMITS.slotNote, `${path}.note`, errors);
+  return {
+    ok: errors.length === 0,
+    value: errors.length ? null : { id, date, time, timezone, note },
+    errors,
+  };
+}
+
 /**
  * Validates and normalises one post.
  *
@@ -153,7 +316,8 @@ function validatePost(input, opts = {}) {
 
   const known = new Set([
     'id', 'title', 'scheduledAt', 'timezone', 'status', 'category', 'tags',
-    'content', 'image', 'notes', 'createdAt', 'updatedAt', 'revision',
+    'content', 'image', 'notes', 'createdAt', 'updatedAt', 'revision', 'discord',
+    'createdBy', 'updatedBy',
   ]);
   for (const key of Object.keys(input)) {
     if (!known.has(key)) warnings.push({ path: `${path}.${key}`, message: 'unknown field, ignored' });
@@ -236,6 +400,7 @@ function validatePost(input, opts = {}) {
     }
     return new Date(v).toISOString();
   };
+  const discord = normalizeDiscord(input.discord, `${path}.discord`, errors, warnings);
   const createdAt = dateOrNull(input.createdAt, 'createdAt');
   const updatedAt = dateOrNull(input.updatedAt, 'updatedAt');
 
@@ -254,6 +419,7 @@ function validatePost(input, opts = {}) {
           content,
           image,
           notes,
+          discord,
           createdAt,
           updatedAt,
         }
@@ -357,7 +523,7 @@ function defaultSettings() {
     defaultTimezone: 'auto',
     weekStart: 1,
     defaultTime: '18:00',
-    targetProfile: 'gfm',
+    targetProfile: 'discord',
     preserveLineBreaks: true,
     preserveBlankLines: true,
     templates: [],
@@ -378,6 +544,7 @@ module.exports = {
   isValidIsoWithOffset,
   slugify,
   validatePost,
+  validateSlot,
   validateSettings,
   defaultSettings,
 };

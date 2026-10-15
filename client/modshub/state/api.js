@@ -73,6 +73,7 @@ function wirePost(post) {
     content: post.content,
     image: post.image,
     notes: post.notes,
+    discord: post.discord || null,
     createdAt: post.createdAt || undefined,
   };
 }
@@ -95,6 +96,17 @@ export const api = {
       }
       throw error;
     }
+  },
+
+  async putSlot(slot) {
+    const { data } = await request('PUT', `/slots/${encodeURIComponent(slot.id)}`, {
+      json: { slot: { date: slot.date, time: slot.time || '', timezone: slot.timezone, note: slot.note || '' } },
+    });
+    return data.slot;
+  },
+
+  async deleteSlot(id) {
+    await request('DELETE', `/slots/${encodeURIComponent(id)}`);
   },
 
   async deletePost(id) {

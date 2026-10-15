@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState, useEffect } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { weekDays, todayKey, formatDayShort, minutesOfDay, timeFromMinutes, wallParts, dayNumber, weekdayNames, formatDayLong } from '../../core/time.js';
 import { StatusDot, useMedia } from '../ui.jsx';
-import { useDayGroups } from './shared.jsx';
+import { useDayGroups, useSlotGroups } from './shared.jsx';
 
 const HOUR_H = 56;
 const BLOCK_MIN = 34; // visual length of a post in minutes
@@ -40,6 +40,7 @@ export default function TimeGridView({ posts, mode }) {
   const { ui, setUi, settings, displayZone, actions } = useStudio();
   const fine = useMedia('(pointer: fine)');
   const groups = useDayGroups(posts);
+  const slotGroups = useSlotGroups();
   const days = useMemo(() => (mode === 'day' ? [ui.cursor] : weekDays(ui.cursor, settings.weekStart)), [mode, ui.cursor, settings.weekStart]);
   const today = todayKey(displayZone);
   const scrollRef = useRef(null);
@@ -82,6 +83,7 @@ export default function TimeGridView({ posts, mode }) {
           >
             <small>{mode === 'day' ? formatDayShort(d).split(' ')[0] : names[i]}</small>
             <b>{dayNumber(d)}</b>
+            {(slotGroups.get(d) || []).some((f) => !f.time) ? <em className="ms-grid__free">Free</em> : null}
           </button>
         ))}
       </div>
@@ -103,7 +105,9 @@ export default function TimeGridView({ posts, mode }) {
                 style={{ height: HOUR_H * 24 }}
                 onClick={(e) => {
                   if (e.target !== e.currentTarget) return;
-                  actions.createPost({ date: d, time: timeFromMinutes(minutesAt(e, e.currentTarget, 30)) });
+                  const time = timeFromMinutes(minutesAt(e, e.currentTarget, 30));
+                  if (ui.markFree) actions.toggleFree({ date: d, time });
+                  else actions.createPost({ date: d, time });
                 }}
                 onDragOver={(e) => {
                   if (!fine) return;
@@ -120,6 +124,23 @@ export default function TimeGridView({ posts, mode }) {
                   <div key={h} className="ms-grid__line" style={{ top: h * HOUR_H }} />
                 ))}
                 {d === now.date ? <div className="ms-grid__now" style={{ top: (now.minutes / 60) * HOUR_H }} /> : null}
+                {(slotGroups.get(d) || []).filter((f) => f.time).map(({ slot, time }) => (
+                  <button
+                    type="button"
+                    key={slot.id}
+                    className="ms-block ms-block--free"
+                    style={{ top: (minutesOfDay(time) / 60) * HOUR_H, height: Math.max(26, (BLOCK_MIN / 60) * HOUR_H - 2), left: 2, right: 2 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (ui.markFree) actions.removeSlot(slot.id);
+                      else setUi({ freeSlot: slot.id });
+                    }}
+                    title={`Free place at ${time}${slot.note ? `: ${slot.note}` : ''}`}
+                  >
+                    <span className="ms-block__time">{time}</span>
+                    <span className="ms-block__title">Free{slot.note ? `: ${slot.note}` : ''}</span>
+                  </button>
+                ))}
                 {items.map(({ post, time, start, lane, lanes }) => (
                   <button
                     type="button"

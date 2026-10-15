@@ -1,25 +1,26 @@
 import { forwardRef, useCallback, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import {
-  toggleBold, toggleItalic, toggleStrike, toggleInlineCode, setHeading, toggleQuote, toggleBulletList,
-  toggleNumberedList, toggleCodeBlock, insertLink, insertImage, insertTable, insertHorizontalRule,
-  continueList, indentList,
+  discordBold, discordItalic, toggleStrike, toggleInlineCode, toggleUnderline, toggleSpoiler, setHeading,
+  toggleQuote, toggleMultilineQuote, toggleSubtext, toggleBulletList, toggleNumberedList, toggleCodeBlock,
+  insertLink, insertText, continueList, indentList,
 } from '../../core/editor-ops.js';
 import { History } from '../../core/history.js';
 import { isMac } from './FormatToolbar.jsx';
 
 const OPS = {
-  bold: toggleBold,
-  italic: toggleItalic,
+  bold: discordBold,
+  italic: discordItalic,
+  underline: toggleUnderline,
   strike: toggleStrike,
+  spoiler: toggleSpoiler,
   code: toggleInlineCode,
   codeblock: toggleCodeBlock,
   quote: toggleQuote,
+  mquote: toggleMultilineQuote,
+  subtext: toggleSubtext,
   ul: toggleBulletList,
   ol: toggleNumberedList,
   link: insertLink,
-  image: insertImage,
-  table: insertTable,
-  hr: insertHorizontalRule,
   h1: (s) => setHeading(s, 1),
   h2: (s) => setHeading(s, 2),
   h3: (s) => setHeading(s, 3),
@@ -29,7 +30,7 @@ const OPS = {
  * Markdown source editor: a plain <textarea> with our own undo history, so
  * toolbar actions can edit programmatically without losing undo.
  */
-const MarkdownEditor = forwardRef(function MarkdownEditor({ value, onChange, onHistory, placeholder, disabled, id }, ref) {
+const MarkdownEditor = forwardRef(function MarkdownEditor({ value, onChange, onHistory, placeholder, disabled, id, className = '', label = 'Message text', rows }, ref) {
   const taRef = useRef(null);
   const historyRef = useRef(null);
   const lastValue = useRef(value);
@@ -109,10 +110,15 @@ const MarkdownEditor = forwardRef(function MarkdownEditor({ value, onChange, onH
   useImperativeHandle(
     ref,
     () => ({
-      command(name) {
+      command(name, arg) {
         if (name === 'undo') undo();
         else if (name === 'redo') redo();
-        else run(name);
+        else if (name === 'insert') {
+          const el = taRef.current;
+          if (!el) return;
+          commit(insertText({ value: el.value, start: el.selectionStart, end: el.selectionEnd }, arg), 'action');
+          el.focus();
+        } else run(name);
       },
       focus: () => taRef.current && taRef.current.focus(),
     }),
@@ -148,6 +154,8 @@ const MarkdownEditor = forwardRef(function MarkdownEditor({ value, onChange, onH
     else if (!e.altKey && !e.shiftKey && key === 'b') run('bold');
     else if (!e.altKey && !e.shiftKey && key === 'i') run('italic');
     else if (!e.altKey && !e.shiftKey && key === 'e') run('code');
+    else if (!e.altKey && !e.shiftKey && key === 'u') run('underline');
+    else if (!e.altKey && e.shiftKey && key === 's') run('spoiler');
     else if (!e.altKey && !e.shiftKey && key === 'k') run('link');
     else if (!e.altKey && e.shiftKey && key === 'x') run('strike');
     else if (!e.altKey && e.shiftKey && key === 'e') run('codeblock');
@@ -165,13 +173,14 @@ const MarkdownEditor = forwardRef(function MarkdownEditor({ value, onChange, onH
     <textarea
       id={id}
       ref={taRef}
-      className="ms-source"
+      className={`ms-source ${className}`}
+      rows={rows}
       value={value}
       placeholder={placeholder}
       disabled={disabled}
       spellCheck
       autoCapitalize="sentences"
-      aria-label="Post content (Markdown)"
+      aria-label={label}
       onKeyDown={onKeyDown}
       onChange={(e) => {
         const el = e.target;

@@ -23,7 +23,7 @@ export const BUILT_IN_TEMPLATES = [
 
 **Compatibility:** [game version / required mods]
 
-[Download it on ModsHub](https://modshub.io/)
+-# Download it on ModsHub: https://modshub.io/
 `,
   },
   {
@@ -50,6 +50,8 @@ What's new in this release:
 - [Fix]
 
 > Update from the ModsHub app or download the latest version from the library.
+
+-# Thanks for the feedback!
 `,
   },
   {
@@ -69,7 +71,7 @@ What's new in this release:
 2. [Step two]
 3. [Step three]
 
-*Available now.*
+__Available now.__
 `,
   },
   {
@@ -102,7 +104,7 @@ Thank you for being part of ModsHub. ❤️
 
 ~~[Old price]~~ **[New price]**
 
-[Get it now](https://modshub.io/)
+Get it now: https://modshub.io/
 `,
   },
 ];

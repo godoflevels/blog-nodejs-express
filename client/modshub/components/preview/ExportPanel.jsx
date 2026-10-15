@@ -13,23 +13,28 @@ export default function ExportPanel({ post, rendered, imageExport, onOpenImage }
       <div className="ms-export__group">
         <h4>Copy</h4>
         <div className="ms-export__buttons">
-          <Button variant="soft" size="sm" icon="copy" onClick={() => copy('markdown')}>Copy Markdown</Button>
+          <Button variant="primary" size="sm" icon="copy" data-testid="copy-text" onClick={() => copy('markdown')}>Copy message text</Button>
+          <Button variant="soft" size="sm" icon="copy" onClick={() => copy('webhook')}>Copy webhook JSON</Button>
           <Button variant="soft" size="sm" icon="copy" onClick={() => copy('plain')}>Copy Plain Text</Button>
           <Button variant="soft" size="sm" icon="copy" onClick={() => copy('rich')}>Copy Rich Text</Button>
-          <Button variant="soft" size="sm" icon="copy" onClick={() => copy('json')}>Copy JSON</Button>
+          <Button variant="soft" size="sm" icon="copy" onClick={() => copy('json')}>Copy post JSON</Button>
         </div>
         <p className="ms-hint">
-          <Icon name="info" size={14} /> Rich Text keeps headings, bold, italic, links, lists and quotes in apps that accept
-          formatted text (Docs, Word, Gmail, Notion…). Plain-text fields ignore formatting — use Copy Markdown there.
+          <Icon name="info" size={14} />
+          <span>
+            “Copy message text” is exactly what you paste into Discord, with its own formatting
+            (<code>**bold**</code>, <code>__underline__</code>, <code>||spoiler||</code>) intact. Embeds need the webhook JSON.
+          </span>
         </p>
       </div>
 
       <div className="ms-export__group">
         <h4>Download</h4>
         <div className="ms-export__buttons">
-          <Button variant="soft" size="sm" icon="download" onClick={() => download('md')}>Markdown (.md)</Button>
+          <Button variant="soft" size="sm" icon="download" onClick={() => download('md')}>Message text (.md)</Button>
           <Button variant="soft" size="sm" icon="download" onClick={() => download('txt')}>Plain Text (.txt)</Button>
-          <Button variant="soft" size="sm" icon="download" onClick={() => download('json')}>JSON (.json)</Button>
+          <Button variant="soft" size="sm" icon="download" onClick={() => download('webhook')}>Webhook JSON</Button>
+          <Button variant="soft" size="sm" icon="download" onClick={() => download('json')}>Post JSON</Button>
           <Button
             variant="primary"
             size="sm"

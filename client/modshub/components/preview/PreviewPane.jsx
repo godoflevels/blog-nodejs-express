@@ -1,36 +1,39 @@
 import { useMemo } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { checkCompatibility, TARGET_PROFILES } from '../../core/compat.js';
+import { checkCompatibility } from '../../core/compat.js';
 import { Icon } from '../ui.jsx';
-import Prose from './Prose.jsx';
+import DiscordPreview from '../discord/DiscordPreview.jsx';
+import { discordIssues } from '../../core/discord.js';
 import SlideStrip from './SlideStrip.jsx';
 import ImageSettings from './ImageSettings.jsx';
 import ExportPanel from './ExportPanel.jsx';
 import { useImageExport, useRendered } from './hooks.js';
 
 const TABS = [
-  ['preview', 'Preview'],
-  ['raw', 'Raw Markdown'],
+  ['preview', 'Discord'],
+  ['raw', 'Raw text'],
   ['plain', 'Plain Text'],
   ['image', 'Export Preview'],
 ];
 
-export function CompatWarnings({ markdown }) {
-  const { settings } = useStudio();
-  const warnings = useMemo(() => checkCompatibility(markdown, settings.targetProfile), [markdown, settings.targetProfile]);
-  if (warnings.length === 0) return null;
-  const profile = TARGET_PROFILES[settings.targetProfile] || TARGET_PROFILES.gfm;
+/** Discord's real limits plus syntax Discord does not render. */
+export function DiscordIssues({ post }) {
+  const issues = useMemo(() => discordIssues(post), [post.content, post.discord]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unsupported = useMemo(() => checkCompatibility(post.content, 'discord'), [post.content]);
+  if (issues.length === 0 && unsupported.length === 0) return null;
   return (
     <div className="ms-warn" role="status">
       <Icon name="alert" size={16} />
       <div>
-        <strong>{warnings.length === 1 ? '1 formatting warning' : `${warnings.length} formatting warnings`}</strong>
+        <strong>Before you send this to Discord</strong>
         <ul>
-          {warnings.map((w) => (
+          {issues.map((w, i) => (
+            <li key={`i${i}`} className={w.level === 'error' ? 'is-error' : ''}>{w.message}</li>
+          ))}
+          {unsupported.map((w) => (
             <li key={w.feature}>{w.message}</li>
           ))}
         </ul>
-        <small>Target format: {profile.label}. Change it in Settings.</small>
       </div>
     </div>
   );
@@ -38,7 +41,7 @@ export function CompatWarnings({ markdown }) {
 
 export default function PreviewPane({ post, showExport = true, forcedTab, tabs = ['preview', 'raw', 'plain', 'image'] }) {
   const { ui, setUi } = useStudio();
-  const rendered = useRendered(post.content);
+  const rendered = useRendered(post.content, post.discord);
   const imageExport = useImageExport(post, rendered.html);
   const tab = forcedTab || (tabs.includes(ui.previewTab) ? ui.previewTab : tabs[0]);
 
@@ -81,7 +84,7 @@ export default function PreviewPane({ post, showExport = true, forcedTab, tabs =
         </div>
       );
     }
-    return <Prose markdown={post.content} image={post.image} />;
+    return <DiscordPreview post={post} />;
   })();
 
   return (
@@ -101,7 +104,7 @@ export default function PreviewPane({ post, showExport = true, forcedTab, tabs =
         ))}
       </div>
       <div className="ms-preview__scroll">
-        <CompatWarnings markdown={post.content} />
+        {tab === 'preview' ? <DiscordIssues post={post} /> : null}
         <div className="ms-preview__content" role="tabpanel">{body}</div>
         {showExport ? (
           <ExportPanel post={post} rendered={rendered} imageExport={imageExport} onOpenImage={() => setUi({ previewTab: 'image' })} />

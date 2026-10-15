@@ -61,6 +61,13 @@ function inlineText(nodes) {
         out += same || !href ? text : `${text} (${href})`;
         break;
       }
+      case 'discord_mention':
+      case 'discord_timestamp':
+        out += node.token.content;
+        break;
+      case 'discord_emoji':
+        out += `:${node.token.meta.name}:`;
+        break;
       case 'html_inline': {
         if (/task-list-item-checkbox/.test(node.token.content)) {
           out += /checked/.test(node.token.content) ? '☑' : '☐';
@@ -110,6 +117,7 @@ function renderBlock(node) {
   switch (node.type) {
     case 'paragraph':
     case 'heading':
+    case 'subtext':
       return inlineText(node.children.flatMap((c) => (c.type === 'inline' ? c.children : [c])));
     case 'bullet_list':
       return renderList(node, false);
@@ -153,7 +161,7 @@ function renderBlocks(children, tight) {
  * @param {string} src markdown
  * @param {object} [opts] same options as getMarkdown() (breaks / preserveBlankLines)
  */
-export function toPlainText(src, opts) {
-  const tree = buildTree(parseMarkdown(src, opts));
+export function toPlainText(src, opts, parse = parseMarkdown) {
+  const tree = buildTree(parse(src, opts));
   return renderBlocks(tree.children, false).replace(/\s+$/g, '');
 }

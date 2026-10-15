@@ -12,6 +12,7 @@ const {
   LIMITS,
   STATUSES,
   validatePost,
+  validateSlot,
   validateSettings,
 } = require('./schema');
 
@@ -46,10 +47,38 @@ function apiError(res, status, code, message, extra = {}) {
  * @param {string} options.jwtSecret  secret used to verify the admin cookie
  * @param {string} [options.cookieName]
  * @param {string} [options.loginPath]
+ * @param {string|((userId: string) => string)} [options.workspaceId]
+ *        One id for everybody = a shared calendar. Default: one workspace per account.
+ * @param {(userId: string) => Promise<string>} [options.resolveUsername]
+ *        Maps the JWT user id to a display name (shown as "edited by").
  */
-function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath = '/admin' }) {
+function createModshubRouter({
+  store,
+  jwtSecret,
+  cookieName = 'token',
+  loginPath = '/admin',
+  workspaceId,
+  resolveUsername,
+}) {
   if (!store) throw new Error('createModshubRouter: store is required');
   const router = express.Router();
+  const workspaceOf =
+    typeof workspaceId === 'function' ? workspaceId : workspaceId ? () => workspaceId : (userId) => userId;
+  const nameCache = new Map();
+  const nameOf = async (userId) => {
+    const hit = nameCache.get(userId);
+    if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.name;
+    let name = userId;
+    if (resolveUsername) {
+      try {
+        name = (await resolveUsername(userId)) || userId;
+      } catch (_) {
+        name = userId;
+      }
+    }
+    nameCache.set(userId, { name, at: Date.now() });
+    return name;
+  };
 
   router.use(cookieParser());
 
@@ -72,10 +101,12 @@ function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath
     next();
   };
 
-  const requireApi = (req, res, next) => {
+  const requireApi = async (req, res, next) => {
     const owner = readOwner(req);
     if (!owner) return apiError(res, 401, 'unauthorized', 'Please sign in again');
-    req.ownerId = owner;
+    req.userId = owner;
+    req.ownerId = workspaceOf(owner);
+    req.username = await nameOf(owner);
     // Cookies are SameSite=Strict already; this is a second, header based check.
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const site = req.get('sec-fetch-site');
@@ -143,9 +174,12 @@ function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath
   api.get('/bootstrap', async (req, res, next) => {
     try {
       const [posts, settings] = await Promise.all([store.listPosts(req.ownerId), store.getSettings(req.ownerId)]);
+      const slots = await store.listSlots(req.ownerId);
       res.json({
-        user: { id: req.ownerId },
+        user: { id: req.userId, name: req.username },
+        workspace: req.ownerId,
         posts,
+        slots,
         settings,
         serverTime: new Date().toISOString(),
         limits: { ...LIMITS, assetBytes: MAX_ASSET_BYTES },
@@ -185,6 +219,7 @@ function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath
         });
       }
       const previous = baseRevision === null ? null : await store.getPost(req.ownerId, id);
+      result.value.updatedBy = req.username;
       const saved = await store.upsertPost(req.ownerId, result.value, baseRevision);
       if (saved.status === 'conflict') {
         return res.status(409).json({ error: 'conflict', message: 'Post was changed elsewhere', server: saved.server });
@@ -233,6 +268,7 @@ function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath
           continue;
         }
         const post = v.value;
+        post.updatedBy = req.username;
         if (seen.has(post.id)) {
           results.push({ index: i, id: post.id, status: 'skipped', reason: 'duplicate id in request' });
           continue;
@@ -286,10 +322,36 @@ function createModshubRouter({ store, jwtSecret, cookieName = 'token', loginPath
           clean.category = patch.category.trim();
         }
         if (Object.keys(clean).length === 0) return apiError(res, 400, 'bad_request', 'patch must set status or category');
+        clean.updatedBy = req.username;
         const posts = await store.patchMany(req.ownerId, ids, clean);
         return res.json({ posts });
       }
       return apiError(res, 400, 'bad_request', 'action must be "delete" or "patch"');
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  api.put('/slots/:id', json, async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!ID_RE.test(id)) return apiError(res, 400, 'bad_id', 'Invalid slot id');
+      const body = req.body || {};
+      const result = validateSlot({ ...(body.slot || {}), id }, { path: 'slot', defaultTimezone: body.slot && body.slot.timezone });
+      if (!result.ok) return apiError(res, 422, 'invalid_slot', 'Slot failed validation', { details: result.errors });
+      const saved = await store.putSlot(req.ownerId, { ...result.value, createdBy: req.username });
+      res.json({ slot: saved });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  api.delete('/slots/:id', async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!ID_RE.test(id)) return apiError(res, 400, 'bad_id', 'Invalid slot id');
+      await store.deleteSlot(req.ownerId, id);
+      res.json({ ok: true });
     } catch (e) {
       next(e);
     }

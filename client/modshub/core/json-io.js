@@ -19,6 +19,7 @@ export function postToExport(post) {
     content: post.content,
     image: post.image ? { src: post.image.src, alt: post.image.alt || '' } : null,
     notes: post.notes,
+    discord: post.discord || null,
     createdAt: post.createdAt || null,
     updatedAt: post.updatedAt || null,
   };

@@ -92,6 +92,7 @@ export default function ImportDialog({ onClose }) {
           tags: [],
           image: null,
           notes: '',
+          discord: t.discord || null,
         },
         truncated: t.content.length > schema.LIMITS.content,
       });

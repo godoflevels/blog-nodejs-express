@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { renderMarkdown } from '../../core/markdown.js';
-import { sanitizeHtml } from '../../core/sanitize.js';
+import { parseDiscord } from '../../core/discord.js';
+import { bodyHtml } from '../../core/discord-render.js';
 import { toPlainText } from '../../core/plaintext.js';
 import { layoutSlides, normalizeOptions, renderSlideBlob, zipBlobs } from '../../core/image-export.js';
 import { downloadBlob, fileStem } from '../../core/filenames.js';
@@ -15,21 +15,21 @@ export function useMdOptions() {
   );
 }
 
-export function useRendered(markdown) {
+export function useRendered(markdown, discord = null) {
   const mdOptions = useMdOptions();
   return useMemo(() => {
     let html = '';
     let plain = '';
     try {
-      html = sanitizeHtml(renderMarkdown(markdown, mdOptions));
-      plain = toPlainText(markdown, mdOptions);
+      html = bodyHtml({ content: markdown, discord });
+      plain = toPlainText(markdown, {}, parseDiscord);
     } catch (error) {
       html = '<p>Preview failed to render this text.</p>';
       plain = markdown;
       console.error('[modshub] render failed', error);
     }
     return { html, plain, mdOptions };
-  }, [markdown, mdOptions]);
+  }, [markdown, discord, mdOptions]);
 }
 
 /**

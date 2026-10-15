@@ -1,4 +1,4 @@
-import { renderMarkdown } from './markdown.js';
+import { renderDiscord, parseDiscord } from './discord.js';
 import { sanitizeHtml } from './sanitize.js';
 import { toPlainText } from './plaintext.js';
 
@@ -15,16 +15,15 @@ import { toPlainText } from './plaintext.js';
  */
 
 /** Sanitized HTML intended for pasting into other editors. */
-export function buildRichHtml(src, mdOptions = {}) {
-  const raw = renderMarkdown(src, { ...mdOptions, inlineStyles: true });
-  return sanitizeHtml(raw, { allowStyle: true });
+export function buildRichHtml(src) {
+  return sanitizeHtml(renderDiscord(src), { allowStyle: true });
 }
 
-export function buildPayloads(markdown, mdOptions = {}) {
+export function buildPayloads(markdown) {
   return {
     markdown,
-    plain: toPlainText(markdown, mdOptions),
-    html: buildRichHtml(markdown, mdOptions),
+    plain: toPlainText(markdown, {}, parseDiscord),
+    html: buildRichHtml(markdown),
   };
 }
 

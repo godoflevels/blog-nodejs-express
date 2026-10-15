@@ -71,7 +71,7 @@ function trailingRun(text, ch) {
  * bold and italic can be toggled independently on `***text***`.
  * @param {'bold'|'italic'} kind
  */
-function toggleEmphasis(sel, kind) {
+function toggleEmphasis(sel, kind, chars = ['*', '_']) {
   let { value, start, end } = sel;
   const need = kind === 'bold' ? 2 : 1;
   const add = kind === 'bold' ? '**' : '*';
@@ -90,7 +90,7 @@ function toggleEmphasis(sel, kind) {
     selected = value.slice(start, end);
   }
 
-  for (const ch of ['*', '_']) {
+  for (const ch of chars) {
     // Markers inside the selection: user selected `**text**` itself.
     const lead = leadingRun(selected, ch);
     const trail = trailingRun(selected, ch);
@@ -128,6 +128,9 @@ function toggleEmphasis(sel, kind) {
 
 export const toggleBold = (sel) => toggleEmphasis(sel, 'bold');
 export const toggleItalic = (sel) => toggleEmphasis(sel, 'italic');
+// Discord: `__x__` is underline, so only `*` counts as bold; italic is `*x*` or `_x_`.
+export const discordBold = (sel) => toggleEmphasis(sel, 'bold', ['*']);
+export const discordItalic = (sel) => toggleEmphasis(sel, 'italic', ['*', '_']);
 
 function toggleSimpleWrap(sel, marker, placeholder) {
   let { value, start, end } = sel;
@@ -163,6 +166,8 @@ function toggleSimpleWrap(sel, marker, placeholder) {
 }
 
 export const toggleStrike = (sel) => toggleSimpleWrap(sel, '~~', 'strikethrough');
+export const toggleUnderline = (sel) => toggleSimpleWrap(sel, '__', 'underlined');
+export const toggleSpoiler = (sel) => toggleSimpleWrap(sel, '||', 'spoiler');
 
 export function toggleInlineCode(sel) {
   const { value, start, end } = sel;
@@ -215,6 +220,29 @@ export function toggleQuote(sel) {
   return mapLines(sel, (lines) => {
     const all = lines.every((l) => QUOTE_PREFIX.test(l));
     return lines.map((l) => (all ? l.replace(QUOTE_PREFIX, '$1') : l.trim() === '' ? '>' : `> ${l}`));
+  });
+}
+
+/** `>>> ` makes Discord quote the rest of the message. Toggles it on the current line. */
+export function toggleMultilineQuote(sel) {
+  const { value, start, end } = sel;
+  const from = lineStartOf(value, start);
+  const hasMarker = value.startsWith('>>> ', from);
+  const next = hasMarker
+    ? value.slice(0, from) + value.slice(from + 4)
+    : `${value.slice(0, from)}>>> ${value.slice(from)}`;
+  const delta = hasMarker ? -4 : 4;
+  return { value: next, start: Math.max(from, start + delta), end: Math.max(from, end + delta) };
+}
+
+/** `-# ` renders the line as small grey subtext. */
+export function toggleSubtext(sel) {
+  return mapLines(sel, (lines) => {
+    const all = lines.every((l) => l.trim() === '' || l.startsWith('-# '));
+    return lines.map((l) => {
+      if (l.trim() === '') return l;
+      return all ? l.slice(3) : `-# ${l.replace(/^#{1,6}[ \t]+/, '')}`;
+    });
   });
 }
 

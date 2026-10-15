@@ -3,6 +3,7 @@ import { useStudio } from '../../state/StudioContext.jsx';
 import { Button, Modal } from '../ui.jsx';
 import { buildRichHtml, writeToClipboard } from '../../core/clipboard.js';
 import { buildExport, stringifyExport } from '../../core/json-io.js';
+import { messageText, toWebhookPayload } from '../../core/discord.js';
 import { downloadText, fileStem } from '../../core/filenames.js';
 import { isMac } from '../editor/FormatToolbar.jsx';
 
@@ -16,8 +17,11 @@ export function useExportActions(post, plain, mdOptions) {
     let payload;
     let label;
     if (kind === 'markdown') {
-      payload = { text: post.content };
-      label = 'Markdown';
+      payload = { text: messageText(post) };
+      label = 'Message text';
+    } else if (kind === 'webhook') {
+      payload = { text: `${JSON.stringify(toWebhookPayload(post), null, 2)}\n` };
+      label = 'Webhook JSON';
     } else if (kind === 'plain') {
       payload = { text: plain };
       label = 'Plain text';
@@ -26,7 +30,7 @@ export function useExportActions(post, plain, mdOptions) {
       label = 'Rich text';
     } else {
       payload = { text: stringifyExport(buildExport([post])) };
-      label = 'JSON';
+      label = 'Post JSON';
     }
     const result = await writeToClipboard(payload);
     if (!result.ok) setManual({ label, text: payload.text });
@@ -36,10 +40,12 @@ export function useExportActions(post, plain, mdOptions) {
   };
 
   const download = (kind) => {
-    if (kind === 'md') downloadText(post.content, `${stem}.md`, 'text/markdown;charset=utf-8');
+    if (kind === 'md') downloadText(messageText(post), `${stem}.md`, 'text/markdown;charset=utf-8');
     else if (kind === 'txt') downloadText(plain, `${stem}.txt`);
-    else downloadText(stringifyExport(buildExport([post])), `${stem}.json`, 'application/json;charset=utf-8');
-    toast(`${kind === 'md' ? 'Markdown' : kind === 'txt' ? 'Text' : 'JSON'} downloaded`);
+    else if (kind === 'webhook') {
+      downloadText(`${JSON.stringify(toWebhookPayload(post), null, 2)}\n`, `${stem}-webhook.json`, 'application/json;charset=utf-8');
+    } else downloadText(stringifyExport(buildExport([post])), `${stem}.json`, 'application/json;charset=utf-8');
+    toast(`${{ md: 'Message text', txt: 'Plain text', webhook: 'Webhook JSON' }[kind] || 'Post JSON'} downloaded`);
   };
 
   const dialog = manual ? (

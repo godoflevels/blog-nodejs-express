@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const { MongoStore } = require('connect-mongo');
 
+const mongoose = require('mongoose');
+const User = require('./server/models/User');
 const connectDB = require('./server/config/db');
 const { isActiveRoute } = require('./server/helpers/routeHelpers');
 const { createModshubRouter } = require('./server/modshub');
@@ -22,10 +24,24 @@ connectDB();
 
 // ModsHub Post Studio (/modshub). Mounted before the global body parsers
 // because it needs larger JSON limits and does its own cookie/auth handling.
+const modshubStore = createMongoStore();
+const MODSHUB_WORKSPACE = process.env.MODSHUB_WORKSPACE || 'shared';
 app.use('/modshub', createModshubRouter({
-  store: createMongoStore(),
-  jwtSecret: process.env.JWT_SECRET
+  store: modshubStore,
+  jwtSecret: process.env.JWT_SECRET,
+  // Every admin works in one shared calendar.
+  workspaceId: MODSHUB_WORKSPACE,
+  resolveUsername: async (userId) => {
+    const user = await User.findById(userId).select('username').lean();
+    return user ? user.username : userId;
+  }
 }));
+// One-off, idempotent: move calendars created before sharing into the shared one.
+mongoose.connection.once('open', () => {
+  modshubStore.adoptWorkspace(MODSHUB_WORKSPACE)
+    .then((moved) => { if (moved) console.log(`ModsHub Studio: moved ${moved} documents into the shared calendar`); })
+    .catch((error) => console.error('ModsHub Studio: workspace merge failed', error));
+});
 
 app.use(express.urlencoded({ extended: true })); // turn on HTML Forms
 app.use(express.json()); // turn on JSON

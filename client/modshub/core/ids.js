@@ -11,6 +11,10 @@ export function newPostId() {
   return `post-${randomString(8)}`;
 }
 
+export function newSlotId() {
+  return `slot-${randomString(8)}`;
+}
+
 export function newTemplateId() {
   return `tpl-${randomString(8)}`;
 }

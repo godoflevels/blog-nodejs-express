@@ -18,7 +18,14 @@ const PORT = Number(process.env.E2E_PORT || 4173);
 const app = express();
 app.set('views', path.join(ROOT, 'views'));
 app.set('view engine', 'ejs');
-app.use('/modshub', createModshubRouter({ store, jwtSecret: SECRET }));
+// Same wiring as production: every signed-in admin shares one calendar.
+const WORKSPACE = 'shared';
+app.use('/modshub', createModshubRouter({
+  store,
+  jwtSecret: SECRET,
+  workspaceId: WORKSPACE,
+  resolveUsername: async (id) => id,
+}));
 app.use(express.static(path.join(ROOT, 'public')));
 
 app.get('/admin', (req, res) => res.type('html').send('<h1>Sign in</h1><p id="login-page">admin login</p>'));
@@ -34,14 +41,15 @@ app.get('/__login', async (req, res) => {
 });
 
 app.get('/__reset', async (req, res) => {
-  const user = String(req.query.user || 'tester');
-  const posts = await store.listPosts(user);
-  await store.deleteMany(user, posts.map((p) => p.id));
-  res.json({ cleared: posts.length });
+  const posts = await store.listPosts(WORKSPACE);
+  await store.deleteMany(WORKSPACE, posts.map((p) => p.id));
+  const slots = await store.listSlots(WORKSPACE);
+  for (const slot of slots) await store.deleteSlot(WORKSPACE, slot.id);
+  res.json({ cleared: posts.length, slots: slots.length });
 });
 
-async function seed(user, count) {
-  const existing = await store.listPosts(user);
+async function seed(_user, count) {
+  const existing = await store.listPosts(WORKSPACE);
   if (existing.length) return;
   const now = new Date();
   const statuses = ['draft', 'planned', 'ready', 'published', 'archived'];
@@ -53,7 +61,7 @@ async function seed(user, count) {
   ];
   for (let i = 0; i < count; i += 1) {
     const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + (i * 2) - 6, 15 + (i % 4), (i % 2) * 30));
-    await store.insertPost(user, {
+    await store.insertPost(WORKSPACE, {
       id: `seed-${String(i + 1).padStart(3, '0')}`,
       title: titles[i % titles.length],
       scheduledAt: day.toISOString(),

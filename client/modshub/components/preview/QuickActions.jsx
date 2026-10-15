@@ -10,20 +10,22 @@ export default function QuickActions({ post }) {
   const { copy, download, dialog } = useExportActions(post, rendered.plain, rendered.mdOptions);
   return (
     <div className="ms-quick" role="group" aria-label="Copy and download">
-      <Button variant="soft" size="sm" icon="copy" onClick={() => copy('markdown')}>Markdown</Button>
-      <Button variant="soft" size="sm" icon="copy" onClick={() => copy('rich')}>Rich text</Button>
+      <Button variant="primary" size="sm" icon="copy" onClick={() => copy('markdown')}>Copy text</Button>
+      <Button variant="soft" size="sm" icon="copy" onClick={() => copy('webhook')}>JSON</Button>
       <Menu
         align="right"
         label="Copy and download options"
-        trigger={<Button variant="primary" size="sm" icon="download">Export</Button>}
+        trigger={<Button variant="soft" size="sm" icon="download">More</Button>}
         items={[
           { heading: 'Copy' },
           { label: 'Copy Plain Text', icon: 'copy', onClick: () => copy('plain') },
-          { label: 'Copy JSON', icon: 'copy', onClick: () => copy('json') },
+          { label: 'Copy Rich Text', icon: 'copy', onClick: () => copy('rich') },
+          { label: 'Copy post JSON', icon: 'copy', onClick: () => copy('json') },
           { heading: 'Download' },
-          { label: 'Markdown (.md)', icon: 'download', onClick: () => download('md') },
+          { label: 'Message text (.md)', icon: 'download', onClick: () => download('md') },
           { label: 'Plain Text (.txt)', icon: 'download', onClick: () => download('txt') },
-          { label: 'JSON (.json)', icon: 'download', onClick: () => download('json') },
+          { label: 'Webhook JSON', icon: 'download', onClick: () => download('webhook') },
+          { label: 'Post JSON', icon: 'download', onClick: () => download('json') },
           { label: 'Image (.png)…', icon: 'image', onClick: () => setUi({ mobileTab: 'export' }) },
         ]}
       />

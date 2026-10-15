@@ -17,6 +17,39 @@ export function useDayGroups(posts) {
   }, [posts, displayZone]);
 }
 
+/** Map of 'YYYY-MM-DD' -> free markers [{slot, time}] in the calendar zone. */
+export function useSlotGroups() {
+  const { slotsView } = useStudio();
+  return useMemo(() => {
+    const map = new Map();
+    for (const { slot, date, time } of slotsView) {
+      if (!map.has(date)) map.set(date, []);
+      map.get(date).push({ slot, time });
+    }
+    return map;
+  }, [slotsView]);
+}
+
+export function FreeChip({ slot, time, onOpen }) {
+  const { ui, actions } = useStudio();
+  return (
+    <button
+      type="button"
+      className="ms-free"
+      onClick={(e) => {
+        e.stopPropagation();
+        // While marking, clicking an existing marker unmarks it.
+        if (ui.markFree) actions.removeSlot(slot.id);
+        else onOpen(slot.id);
+      }}
+      title={`Free place${time ? ` at ${time}` : ''}${slot.note ? `: ${slot.note}` : ''}${slot.createdBy ? ` (marked by ${slot.createdBy})` : ''}`}
+    >
+      <Icon name="star" size={12} />
+      <span>{time ? `${time} ` : ''}Free{slot.note ? `: ${slot.note}` : ''}</span>
+    </button>
+  );
+}
+
 export function PostChip({ post, time, selected, draggable, onOpen, compact = false }) {
   const { categoryById } = useStudio();
   const category = categoryById(post.category);

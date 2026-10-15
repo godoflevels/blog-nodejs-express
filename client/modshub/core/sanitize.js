@@ -11,7 +11,7 @@ const TAGS = [
   'strong', 'b', 'em', 'i', 'del', 's', 'u', 'code', 'pre', 'blockquote',
   'ul', 'ol', 'li', 'a', 'img',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
-  'input', 'sup', 'sub',
+  'input', 'sup', 'sub', 'small',
 ];
 const ATTRS = [
   'href', 'src', 'alt', 'title', 'class', 'type', 'checked', 'disabled', 'start',

@@ -29,11 +29,14 @@ const PostSchema = new Schema(
     content: { type: String, default: '' },
     image: { type: new Schema({ src: String, alt: String }, { _id: false }), default: null },
     notes: { type: String, default: '' },
+    discord: { type: Schema.Types.Mixed, default: null },
+    createdBy: { type: String, default: '' },
+    updatedBy: { type: String, default: '' },
     revision: { type: Number, default: 1 },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
-  { collection: 'modshub_posts', versionKey: false }
+  { collection: 'modshub_posts', versionKey: false, minimize: false }
 );
 PostSchema.index({ ownerId: 1, id: 1 }, { unique: true });
 PostSchema.index({ ownerId: 1, scheduledAt: 1 });
@@ -47,6 +50,21 @@ const SettingsSchema = new Schema(
   },
   { collection: 'modshub_settings', versionKey: false, minimize: false }
 );
+
+const SlotSchema = new Schema(
+  {
+    ownerId: { type: String, required: true },
+    id: { type: String, required: true },
+    date: { type: String, required: true },
+    time: { type: String, default: '' },
+    timezone: { type: String, required: true },
+    note: { type: String, default: '' },
+    createdBy: { type: String, default: '' },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { collection: 'modshub_slots', versionKey: false }
+);
+SlotSchema.index({ ownerId: 1, id: 1 }, { unique: true });
 
 const AssetSchema = new Schema(
   {
@@ -68,6 +86,7 @@ function models(connection) {
     Post: c.models.ModsHubPost || c.model('ModsHubPost', PostSchema),
     Settings: c.models.ModsHubSettings || c.model('ModsHubSettings', SettingsSchema),
     Asset: c.models.ModsHubAsset || c.model('ModsHubAsset', AssetSchema),
+    Slot: c.models.ModsHubSlot || c.model('ModsHubSlot', SlotSchema),
   };
 }
 
@@ -84,9 +103,24 @@ function toApi(doc) {
     content: doc.content || '',
     image: doc.image && doc.image.src ? { src: doc.image.src, alt: doc.image.alt || '' } : null,
     notes: doc.notes || '',
+    discord: doc.discord || null,
+    createdBy: doc.createdBy || '',
+    updatedBy: doc.updatedBy || '',
     revision: doc.revision,
     createdAt: new Date(doc.createdAt).toISOString(),
     updatedAt: new Date(doc.updatedAt).toISOString(),
+  };
+}
+
+function slotToApi(doc) {
+  return {
+    id: doc.id,
+    date: doc.date,
+    time: doc.time || '',
+    timezone: doc.timezone,
+    note: doc.note || '',
+    createdBy: doc.createdBy || '',
+    createdAt: new Date(doc.createdAt).toISOString(),
   };
 }
 
@@ -101,6 +135,7 @@ function editableFields(post) {
     content: post.content,
     image: post.image,
     notes: post.notes,
+    discord: post.discord || null,
   };
 }
 
@@ -109,7 +144,7 @@ function isDuplicateKey(error) {
 }
 
 function createMongoStore(connection) {
-  const { Post, Settings, Asset } = models(connection);
+  const { Post, Settings, Asset, Slot } = models(connection);
 
   async function getPost(ownerId, id) {
     return toApi(await Post.findOne({ ownerId, id }).lean());
@@ -131,6 +166,8 @@ function createMongoStore(connection) {
             ownerId,
             id: post.id,
             ...editableFields(post),
+            createdBy: post.updatedBy || '',
+            updatedBy: post.updatedBy || '',
             revision: 1,
             createdAt: post.createdAt ? new Date(post.createdAt) : now,
             updatedAt: now,
@@ -144,7 +181,7 @@ function createMongoStore(connection) {
 
       const updated = await Post.findOneAndUpdate(
         { ownerId, id: post.id, revision: baseRevision },
-        { $set: { ...editableFields(post), updatedAt: now }, $inc: { revision: 1 } },
+        { $set: { ...editableFields(post), updatedBy: post.updatedBy || '', updatedAt: now }, $inc: { revision: 1 } },
         { returnDocument: 'after', runValidators: true }
       ).lean();
       if (updated) return { status: 'ok', post: toApi(updated) };
@@ -166,9 +203,9 @@ function createMongoStore(connection) {
       const doc = await Post.findOneAndUpdate(
         { ownerId, id: post.id },
         {
-          $set: { ...editableFields(post), updatedAt: now },
+          $set: { ...editableFields(post), updatedBy: post.updatedBy || '', updatedAt: now },
           $inc: { revision: 1 },
-          $setOnInsert: { createdAt: post.createdAt ? new Date(post.createdAt) : now },
+          $setOnInsert: { createdAt: post.createdAt ? new Date(post.createdAt) : now, createdBy: post.updatedBy || '' },
         },
         { returnDocument: 'after', upsert: true, runValidators: true }
       ).lean();
@@ -181,6 +218,8 @@ function createMongoStore(connection) {
         ownerId,
         id: post.id,
         ...editableFields(post),
+        createdBy: post.updatedBy || '',
+        updatedBy: post.updatedBy || '',
         revision: 1,
         createdAt: post.createdAt ? new Date(post.createdAt) : now,
         updatedAt: now,
@@ -190,6 +229,7 @@ function createMongoStore(connection) {
 
     async patchMany(ownerId, ids, patch) {
       const set = { updatedAt: new Date() };
+      if (patch.updatedBy) set.updatedBy = patch.updatedBy;
       if (patch.status) set.status = patch.status;
       if (patch.category !== undefined) set.category = patch.category;
       await Post.updateMany({ ownerId, id: { $in: ids } }, { $set: set, $inc: { revision: 1 } });
@@ -261,6 +301,61 @@ function createMongoStore(connection) {
     async deleteAsset(ownerId, id) {
       const res = await Asset.deleteOne({ ownerId, id });
       return res.deletedCount > 0;
+    },
+
+    async listSlots(ownerId) {
+      const docs = await Slot.find({ ownerId }).sort({ date: 1, time: 1 }).lean();
+      return docs.map(slotToApi);
+    },
+
+    async putSlot(ownerId, slot) {
+      const doc = await Slot.findOneAndUpdate(
+        { ownerId, id: slot.id },
+        {
+          $set: { date: slot.date, time: slot.time || '', timezone: slot.timezone, note: slot.note || '' },
+          $setOnInsert: { createdBy: slot.createdBy || '', createdAt: new Date() },
+        },
+        { returnDocument: 'after', upsert: true }
+      ).lean();
+      return slotToApi(doc);
+    },
+
+    async deleteSlot(ownerId, id) {
+      const res = await Slot.deleteOne({ ownerId, id });
+      return res.deletedCount > 0;
+    },
+
+    /**
+     * Moves documents owned by other accounts into `target`, so every admin
+     * works in one shared calendar. Idempotent; conflicting ids are skipped.
+     */
+    async adoptWorkspace(target) {
+      let moved = 0;
+      for (const Model of [Post, Slot, Asset]) {
+        const foreign = await Model.find({ ownerId: { $ne: target } }).select('_id').lean();
+        for (const { _id } of foreign) {
+          try {
+            await Model.updateOne({ _id }, { $set: { ownerId: target } });
+            moved += 1;
+          } catch (error) {
+            if (!isDuplicateKey(error)) throw error;
+          }
+        }
+      }
+      // Settings: one document per workspace. Keep the target's, else the oldest.
+      const mine = await Settings.findOne({ ownerId: target }).lean();
+      const others = await Settings.find({ ownerId: { $ne: target } }).sort({ updatedAt: 1 }).lean();
+      if (others.length) {
+        if (!mine) {
+          const [first, ...rest] = others;
+          await Settings.updateOne({ _id: first._id }, { $set: { ownerId: target } });
+          moved += 1;
+          for (const o of rest) await Settings.deleteOne({ _id: o._id });
+        } else {
+          for (const o of others) await Settings.deleteOne({ _id: o._id });
+        }
+      }
+      return moved;
     },
   };
 }

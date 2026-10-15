@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import schema from '../../../../server/modshub/schema.js';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { Button, Icon, IconButton, Modal } from '../ui.jsx';
-import { TARGET_PROFILES } from '../../core/compat.js';
 import { listZones, browserZone } from '../../core/time.js';
 import { buildExport, stringifyExport, JSON_TEMPLATE } from '../../core/json-io.js';
 import { downloadText } from '../../core/filenames.js';
@@ -103,23 +102,6 @@ export default function SettingsDialog({ onClose, initialTab = 'general' }) {
             <label className="ms-field">
               <span>Default time for new posts</span>
               <input type="time" value={settings.defaultTime} onChange={(e) => e.target.value && set({ defaultTime: e.target.value })} />
-            </label>
-            <label className="ms-field">
-              <span>Target format</span>
-              <select value={settings.targetProfile} onChange={(e) => set({ targetProfile: e.target.value })}>
-                {Object.entries(TARGET_PROFILES).map(([id, p]) => (
-                  <option key={id} value={id}>{p.label}</option>
-                ))}
-              </select>
-              <small>{(TARGET_PROFILES[settings.targetProfile] || TARGET_PROFILES.gfm).description} Used for formatting warnings only.</small>
-            </label>
-            <label className="ms-check">
-              <input type="checkbox" checked={settings.preserveLineBreaks} onChange={(e) => set({ preserveLineBreaks: e.target.checked })} />
-              <span>Keep single line breaks (Enter starts a new line in preview and exports)</span>
-            </label>
-            <label className="ms-check">
-              <input type="checkbox" checked={settings.preserveBlankLines} onChange={(e) => set({ preserveBlankLines: e.target.checked })} />
-              <span>Keep extra blank lines between paragraphs</span>
             </label>
           </div>
         ) : null}

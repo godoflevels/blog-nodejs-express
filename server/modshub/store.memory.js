@@ -18,6 +18,7 @@ const { defaultSettings } = require('./schema');
  *   countImageRefs(ownerId, src)             -> number
  *   getSettings / putSettings(ownerId, data, baseRevision)
  *   countAssets / putAsset / getAsset / assetExists / deleteAsset
+ *   listSlots / putSlot / deleteSlot, adoptWorkspace(target)
  *
  * A Post is { id, title, scheduledAt(ISO UTC), timezone, status, category,
  * tags, content, image, notes, revision, createdAt, updatedAt }.
@@ -26,6 +27,7 @@ function createMemoryStore() {
   const posts = new Map(); // ownerId -> Map(id -> post)
   const settings = new Map(); // ownerId -> { data, revision }
   const assets = new Map(); // ownerId -> Map(id -> { mime, data, name })
+  const slots = new Map(); // ownerId -> Map(id -> slot)
 
   const bucket = (map, ownerId) => {
     if (!map.has(ownerId)) map.set(ownerId, new Map());
@@ -47,7 +49,10 @@ function createMemoryStore() {
       content: post.content || '',
       image: post.image ? { src: post.image.src, alt: post.image.alt || '' } : null,
       notes: post.notes || '',
+      discord: post.discord ? structuredClone(post.discord) : null,
       revision,
+      createdBy: existing ? existing.createdBy : post.updatedBy || '',
+      updatedBy: post.updatedBy || (existing ? existing.updatedBy : ''),
       createdAt: existing ? existing.createdAt : post.createdAt || now,
       updatedAt: now,
     };
@@ -116,6 +121,7 @@ function createMemoryStore() {
           ...existing,
           ...(patch.status ? { status: patch.status } : {}),
           ...(patch.category !== undefined ? { category: patch.category } : {}),
+          ...(patch.updatedBy ? { updatedBy: patch.updatedBy } : {}),
           revision: existing.revision + 1,
           updatedAt: new Date().toISOString(),
         };
@@ -175,6 +181,51 @@ function createMemoryStore() {
 
     async assetExists(ownerId, id) {
       return bucket(assets, ownerId).has(id);
+    },
+
+    async listSlots(ownerId) {
+      return [...bucket(slots, ownerId).values()]
+        .sort((a, b) => `${a.date}T${a.time || '00:00'}`.localeCompare(`${b.date}T${b.time || '00:00'}`))
+        .map(clone);
+    },
+
+    async putSlot(ownerId, slot) {
+      const map = bucket(slots, ownerId);
+      const existing = map.get(slot.id);
+      const next = {
+        id: slot.id,
+        date: slot.date,
+        time: slot.time || '',
+        timezone: slot.timezone,
+        note: slot.note || '',
+        createdBy: existing ? existing.createdBy : slot.createdBy || '',
+        createdAt: existing ? existing.createdAt : new Date().toISOString(),
+      };
+      map.set(slot.id, next);
+      return clone(next);
+    },
+
+    async deleteSlot(ownerId, id) {
+      return bucket(slots, ownerId).delete(id);
+    },
+
+    /** Moves everything owned by other accounts into `target` (shared calendar). */
+    async adoptWorkspace(target) {
+      let moved = 0;
+      for (const [map] of [[posts], [slots], [assets]]) {
+        const dest = bucket(map, target);
+        for (const [owner, bucketMap] of [...map.entries()]) {
+          if (owner === target) continue;
+          for (const [id, value] of bucketMap) {
+            if (!dest.has(id)) {
+              dest.set(id, value);
+              moved += 1;
+            }
+          }
+          map.delete(owner);
+        }
+      }
+      return moved;
     },
 
     async deleteAsset(ownerId, id) {

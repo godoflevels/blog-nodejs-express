@@ -3,7 +3,9 @@ import schema from '../../../server/modshub/schema.js';
 import { api, describeError, NetworkError, setUnauthorizedHandler } from './api.js';
 import { SaveQueue } from '../core/save-queue.js';
 import { createDraftStore, classifyDrafts } from '../core/drafts.js';
-import { newPostId, newTemplateId, uniqueId } from '../core/ids.js';
+import { newPostId, newSlotId, newTemplateId, uniqueId } from '../core/ids.js';
+import { writeToClipboard } from '../core/clipboard.js';
+import { toWebhookPayload, messageText } from '../core/discord.js';
 import { fromWall, resolveZone, wallParts, moveToDate, moveToWall, todayKey, startOfMonth } from '../core/time.js';
 import { BUILT_IN_TEMPLATES } from '../core/templates.js';
 
@@ -68,15 +70,24 @@ export function StudioProvider({ children }) {
   const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
 
   const postsRef = useRef(new Map());
+  const slotsRef = useRef(new Map());
+  const slotOps = useRef(0);
+  const pendingDeletes = useRef(new Set());
+  const saveEpoch = useRef(0);
+  const phaseRef = useRef('loading');
+  const [userName, setUserName] = useState('');
   const settingsRef = useRef(settings);
   const draftsRef = useRef(null);
   const queueRef = useRef(null);
   const toastId = useRef(0);
   const settingsTimer = useRef(null);
   const settingsSaving = useRef(false);
+  const userNameRef = useRef('');
 
+  userNameRef.current = userName;
   const bump = useCallback(() => setVersion((v) => v + 1), []);
   settingsRef.current = settings;
+  phaseRef.current = phase;
 
   // ---- UI state -----------------------------------------------------------
   const urlInit = useMemo(readUrl, []);
@@ -94,6 +105,8 @@ export function StudioProvider({ children }) {
     mobileTab: 'edit',
     filters: { q: '', status: 'all', category: 'all', from: '', to: '', sort: 'date-asc' },
     selection: [],
+    markFree: false,
+    freeSlot: null,
   }));
 
   const setUi = useCallback((patch) => {
@@ -152,12 +165,15 @@ export function StudioProvider({ children }) {
       save: (post, base) => api.savePost(post, base),
       onChange: () => setQueueTick((n) => n + 1),
       onSaved: (id, serverPost, { superseded }) => {
+        saveEpoch.current += 1;
         const current = postsRef.current.get(id);
         if (current) {
           postsRef.current.set(id, {
             ...current,
             revision: serverPost.revision,
             createdAt: serverPost.createdAt,
+            createdBy: serverPost.createdBy,
+            updatedBy: serverPost.updatedBy,
             updatedAt: superseded ? current.updatedAt : serverPost.updatedAt,
           });
           setVersion((v) => v + 1);
@@ -189,6 +205,8 @@ export function StudioProvider({ children }) {
         queue.track(p.id, p.revision);
       }
       postsRef.current = map;
+      slotsRef.current = new Map((data.slots || []).map((sl) => [sl.id, sl]));
+      setUserName((data.user && data.user.name) || '');
       setSettingsState(data.settings);
       settingsRef.current = data.settings;
       setLimits(data.limits);
@@ -212,6 +230,71 @@ export function StudioProvider({ children }) {
     });
     load();
   }, [load]);
+
+  // ---- shared calendar: pick up changes made by the other person ------------
+  const refresh = useCallback(async () => {
+    if (phaseRef.current !== 'ready') return;
+    const epoch = saveEpoch.current;
+    try {
+      const data = await api.bootstrap();
+      // Our own save landed while the request was in flight: the answer may be
+      // older than local state, try again next tick.
+      if (saveEpoch.current !== epoch) return;
+      let changed = false;
+      const seen = new Set();
+      for (const p of data.posts) {
+        seen.add(p.id);
+        if (pendingDeletes.current.has(p.id)) continue;
+        if (queue.statusOf(p.id) !== 'idle') continue;
+        const local = postsRef.current.get(p.id);
+        if (!local || local.revision !== p.revision) {
+          postsRef.current.set(p.id, p);
+          queue.track(p.id, p.revision);
+          changed = true;
+        }
+      }
+      for (const [id, local] of [...postsRef.current]) {
+        if (!seen.has(id) && local.revision !== null && queue.statusOf(id) === 'idle') {
+          postsRef.current.delete(id);
+          queue.forget(id);
+          changed = true;
+        }
+      }
+      if (slotOps.current === 0) {
+        const next = new Map((data.slots || []).map((sl) => [sl.id, sl]));
+        const before = JSON.stringify([...slotsRef.current.values()].map((x) => [x.id, x.date, x.time, x.note]).sort());
+        const after = JSON.stringify([...next.values()].map((x) => [x.id, x.date, x.time, x.note]).sort());
+        if (before !== after) {
+          slotsRef.current = next;
+          changed = true;
+        }
+      }
+      if (!settingsTimer.current && !settingsSaving.current && data.settings.revision > (settingsRef.current.revision || 0)) {
+        settingsRef.current = data.settings;
+        setSettingsState(data.settings);
+      }
+      if (changed) setVersion((v) => v + 1);
+    } catch (_) {
+      /* offline or signed out: the next tick tries again */
+    }
+  }, [queue]);
+
+  useEffect(() => {
+    if (phase !== 'ready') return undefined;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 20000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [phase, refresh]);
 
   // ---- leaving the page ---------------------------------------------------
   useEffect(() => {
@@ -276,6 +359,20 @@ export function StudioProvider({ children }) {
 
   const selectedPost = ui.selectedId ? postsRef.current.get(ui.selectedId) || null : null;
 
+  /** Free places positioned in the calendar zone: [{slot, date, time}] */
+  const slotsView = useMemo(() => {
+    return [...slotsRef.current.values()]
+      .map((slot) => {
+        if (!slot.time) return { slot, date: slot.date, time: '' };
+        const when = fromWall(slot.date, slot.time, slot.timezone);
+        if (!when) return { slot, date: slot.date, time: slot.time };
+        const w = wallParts(when.iso, displayZone);
+        return { slot, date: w.date, time: w.time };
+      })
+      .sort((a, b) => `${a.date}T${a.time || '00:00'}`.localeCompare(`${b.date}T${b.time || '00:00'}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, displayZone]);
+
   // ---- save state summary -------------------------------------------------
   const saveState = useMemo(() => {
     const s = queue.summary();
@@ -328,6 +425,9 @@ export function StudioProvider({ children }) {
         content: '',
         image: null,
         notes: '',
+        discord: null,
+        createdBy: '',
+        updatedBy: '',
         revision: null,
         createdAt: now,
         updatedAt: now,
@@ -337,8 +437,10 @@ export function StudioProvider({ children }) {
   );
 
   const createPost = useCallback(
-    ({ date, time, template, open = true } = {}) => {
+    ({ date, time, template, open = true, slotId } = {}) => {
       const base = blankPost({ date, time });
+      base.createdBy = userNameRef.current;
+      base.updatedBy = userNameRef.current;
       if (template) {
         base.title = template.title || base.title;
         base.content = template.content || '';
@@ -347,9 +449,11 @@ export function StudioProvider({ children }) {
       }
       queue.track(base.id, null);
       writePost(base);
+      if (slotId) removeSlot(slotId, { quiet: true });
       if (open) setUi({ selectedId: base.id, mobileTab: 'edit' });
       return base;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [blankPost, queue, setUi, writePost]
   );
 
@@ -360,6 +464,7 @@ export function StudioProvider({ children }) {
       const now = new Date().toISOString();
       const copy = {
         ...src,
+        discord: src.discord ? JSON.parse(JSON.stringify(src.discord)) : null,
         id: newPostId(),
         title: `${src.title} (copy)`.slice(0, 200),
         status: 'draft',
@@ -401,12 +506,15 @@ export function StudioProvider({ children }) {
         if (!ok) return false;
       }
       removeLocal(id);
+      pendingDeletes.current.add(id);
       setUi((p) => ({ selectedId: p.selectedId === id ? null : p.selectedId, selection: p.selection.filter((x) => x !== id) }));
       bump();
       try {
         await api.deletePost(id);
+        pendingDeletes.current.delete(id);
         toast('Post deleted');
       } catch (error) {
+        pendingDeletes.current.delete(id);
         postsRef.current.set(id, post);
         queue.track(id, post.revision);
         bump();
@@ -431,14 +539,19 @@ export function StudioProvider({ children }) {
       const backup = ids.map((id) => postsRef.current.get(id)).filter(Boolean);
       // Unsaved new posts only exist locally.
       const remote = backup.filter((p) => p.revision !== null).map((p) => p.id);
-      backup.forEach((p) => removeLocal(p.id));
+      backup.forEach((p) => {
+        removeLocal(p.id);
+        pendingDeletes.current.add(p.id);
+      });
       setUi((p) => ({ selection: [], selectedId: ids.includes(p.selectedId) ? null : p.selectedId }));
       bump();
       try {
         if (remote.length) await api.bulkDelete(remote);
+        backup.forEach((p) => pendingDeletes.current.delete(p.id));
         toast(`${ids.length} post${ids.length > 1 ? 's' : ''} deleted`);
       } catch (error) {
         backup.forEach((p) => {
+          pendingDeletes.current.delete(p.id);
           postsRef.current.set(p.id, p);
           queue.track(p.id, p.revision);
         });
@@ -482,6 +595,90 @@ export function StudioProvider({ children }) {
       }
     },
     [bump, queue, toast]
+  );
+
+  // ---- free places --------------------------------------------------------
+  const removeSlot = useCallback(
+    async (id, { quiet = false } = {}) => {
+      const slot = slotsRef.current.get(id);
+      if (!slot) return;
+      slotsRef.current.delete(id);
+      bump();
+      slotOps.current += 1;
+      try {
+        await api.deleteSlot(id);
+      } catch (error) {
+        slotsRef.current.set(id, slot);
+        bump();
+        if (!quiet) toast(describeError(error), 'error');
+      } finally {
+        slotOps.current -= 1;
+      }
+    },
+    [bump, toast]
+  );
+
+  const addSlot = useCallback(
+    async ({ date, time = '', note = '' }) => {
+      const zone = resolveZone(settingsRef.current.defaultTimezone);
+      const slot = { id: newSlotId(), date, time, timezone: zone, note, createdBy: userNameRef.current, createdAt: new Date().toISOString() };
+      slotsRef.current.set(slot.id, slot);
+      bump();
+      slotOps.current += 1;
+      try {
+        const saved = await api.putSlot(slot);
+        slotsRef.current.set(saved.id, saved);
+        bump();
+      } catch (error) {
+        slotsRef.current.delete(slot.id);
+        bump();
+        toast(describeError(error), 'error');
+      } finally {
+        slotOps.current -= 1;
+      }
+    },
+    [bump, toast]
+  );
+
+  /** Marks the day (or the time) free, or clears an existing marker. */
+  const toggleFree = useCallback(
+    ({ date, time = '' }) => {
+      const existing = [...slotsRef.current.values()].find((s) => s.date === date && (s.time || '') === time);
+      if (existing) return removeSlot(existing.id);
+      return addSlot({ date, time });
+    },
+    [addSlot, removeSlot]
+  );
+
+  const updateSlotNote = useCallback(
+    async (id, note) => {
+      const slot = slotsRef.current.get(id);
+      if (!slot) return;
+      const next = { ...slot, note };
+      slotsRef.current.set(id, next);
+      bump();
+      slotOps.current += 1;
+      try {
+        await api.putSlot(next);
+      } catch (error) {
+        toast(describeError(error), 'error');
+      } finally {
+        slotOps.current -= 1;
+      }
+    },
+    [bump, toast]
+  );
+
+  // ---- one click copy -----------------------------------------------------
+  const copyPost = useCallback(
+    async (post, kind = 'text') => {
+      const text = kind === 'json' ? `${JSON.stringify(toWebhookPayload(post), null, 2)}\n` : messageText(post);
+      const result = await writeToClipboard({ text });
+      if (result.ok) toast('Copied successfully');
+      else toast('Your browser blocked copying. Open the post and use Export → Copy.', 'error');
+      return result.ok;
+    },
+    [toast]
   );
 
   // ---- images -------------------------------------------------------------
@@ -656,6 +853,9 @@ export function StudioProvider({ children }) {
     filteredPosts,
     postById: (id) => postsRef.current.get(id) || null,
     selectedPost,
+    slotsView,
+    userName,
+    refresh,
     ui,
     setUi,
     saveState,
@@ -679,6 +879,11 @@ export function StudioProvider({ children }) {
       importPosts,
       saveSettings,
       saveTemplate,
+      addSlot,
+      removeSlot,
+      toggleFree,
+      updateSlotNote,
+      copyPost,
       saveNow,
       resolveConflict,
       restoreDrafts,

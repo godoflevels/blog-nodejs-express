@@ -48,7 +48,7 @@ function SaveIndicator() {
 }
 
 export default function TopBar({ onImport, onSettings }) {
-  const { ui, setUi, templates, actions, posts, toast, displayZone } = useStudio();
+  const { ui, setUi, templates, actions, posts, toast, displayZone, userName } = useStudio();
   const f = ui.filters;
   const setFilter = (patch) => setUi((p) => ({ filters: { ...p.filters, ...patch } }));
 
@@ -85,6 +85,12 @@ export default function TopBar({ onImport, onSettings }) {
           <span className="ms-logo__mark">Mods<b>Hub</b></span>
           <span className="ms-logo__sub">Post Studio</span>
         </a>
+        {userName ? (
+          <span className="ms-who" title="Everyone who signs in shares this calendar">
+            <i aria-hidden="true">{userName.slice(0, 1).toUpperCase()}</i>
+            <span>{userName} · shared</span>
+          </span>
+        ) : null}
       </div>
 
       <div className="ms-seg ms-top__views" role="tablist" aria-label="View">

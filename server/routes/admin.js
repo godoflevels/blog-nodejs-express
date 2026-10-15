@@ -4,6 +4,7 @@ const Post = require('../models/Post');
 const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const loginLimiter = require('../helpers/loginLimiter');
 
 const adminLayout = '../views/layouts/admin';
 const jwtSecret = process.env.JWT_SECRET;
@@ -46,17 +47,26 @@ router.get('/admin', (req, res, next) => {
 router.post('/admin', async (req, res, next) => {
     try {
       const { username, password } = req.body;
+
+      if (loginLimiter.isBlocked(req.ip)) {
+        return res.status(429).json({ message: "Too many failed attempts. Try again in 15 minutes." });
+      }
+
       const user = await User.findOne({username});
 
       if (!user) {
+        loginLimiter.recordFailure(req.ip);
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       const isPasswordValid = await bcrypt.compare(password, user.password)
 
       if (!isPasswordValid) {
+        loginLimiter.recordFailure(req.ip);
         return res.status(401).json({ message: "Invalid credentials" });
       }
+
+      loginLimiter.reset(req.ip);
 
       const token = jwt.sign({ userId: user._id }, jwtSecret, { expiresIn: '30d'});
       res.cookie('token', token, {
