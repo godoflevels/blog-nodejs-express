@@ -9,6 +9,8 @@ const { MongoStore } = require('connect-mongo');
 
 const connectDB = require('./server/config/db');
 const { isActiveRoute } = require('./server/helpers/routeHelpers');
+const { createModshubRouter } = require('./server/modshub');
+const { createMongoStore } = require('./server/modshub/store.mongo');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -17,6 +19,13 @@ const PORT = process.env.PORT || 3000;
 
 // Connect to DB
 connectDB();
+
+// ModsHub Post Studio (/modshub). Mounted before the global body parsers
+// because it needs larger JSON limits and does its own cookie/auth handling.
+app.use('/modshub', createModshubRouter({
+  store: createMongoStore(),
+  jwtSecret: process.env.JWT_SECRET
+}));
 
 app.use(express.urlencoded({ extended: true })); // turn on HTML Forms
 app.use(express.json()); // turn on JSON

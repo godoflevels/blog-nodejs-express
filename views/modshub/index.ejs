@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#060a0f">
+  <title><%= title %></title>
+  <link rel="icon" href="/img/godoflevel_rounded.png" type="image/png">
+  <% if (built) { %>
+  <link rel="stylesheet" href="/modshub-studio/studio.css?v=<%= version %>">
+  <% } %>
+</head>
+<body class="ms-body">
+  <div id="modshub-root">
+    <div class="ms-boot">
+      <% if (built) { %>
+      <div class="ms-boot__logo">ModsHub <span>Post Studio</span></div>
+      <div class="ms-boot__spinner" aria-hidden="true"></div>
+      <p class="ms-boot__text">Loading your calendar…</p>
+      <% } else { %>
+      <div class="ms-boot__logo">ModsHub <span>Post Studio</span></div>
+      <p class="ms-boot__text">The Studio bundle has not been built yet. Run <code>npm run build:modshub</code>.</p>
+      <% } %>
+    </div>
+  </div>
+  <noscript><p style="color:#fff;padding:24px">ModsHub Post Studio needs JavaScript.</p></noscript>
+  <% if (built) { %>
+  <script type="module" src="/modshub-studio/studio.js?v=<%= version %>"></script>
+  <% } %>
+</body>
+</html>

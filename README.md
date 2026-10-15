@@ -55,6 +55,41 @@ Registration is closed by design. Create the initial user once from a
 throwaway script that hashes a password with bcrypt and inserts it
 into the `users` collection, then delete the script.
 
+## ModsHub Post Studio (`/modshub`)
+
+A private tool for planning and preparing ModsHub posts: a publication
+calendar (month / week / day / list), a Markdown editor with live preview,
+and export to Markdown, plain text, JSON and PNG images. It prepares and
+exports content only, nothing is published automatically.
+
+- Opens at `/modshub` for signed-in admins (`/admin` login, then back to the Studio).
+- Every account has its own calendar; data lives in MongoDB (`modshub_posts`,
+  `modshub_settings`, `modshub_assets`). The browser only keeps unsaved drafts.
+- Autosave with conflict detection, JSON / `.md` / `.txt` / `.zip` import,
+  copy as Markdown, plain text or rich text, PNG export with slide splitting.
+
+Source lives in `client/modshub` (React, bundled with esbuild) and
+`server/modshub` (Express router, API, Mongoose store). The built bundle in
+`public/modshub-studio` is committed, so production only needs
+`npm install && npm start`. After changing anything in `client/`:
+
+```bash
+npm run build:modshub      # one-off build
+npm run dev:modshub        # rebuild on change
+npm test                   # unit + API tests (node:test)
+npx playwright test        # browser tests (in-memory store, no MongoDB)
+```
+
+### Adding an admin user
+
+Registration is closed. Create a user from your own terminal; the password
+is typed at a hidden prompt and stored as a bcrypt hash:
+
+```bash
+node scripts/create-user.js <username>
+node scripts/create-user.js <username> --reset   # change an existing password
+```
+
 ## Scripts
 
 | Command       | Description                     |

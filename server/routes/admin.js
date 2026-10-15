@@ -25,6 +25,9 @@ const authMiddleware = (req, res, next) => {
 }
 
 
+// Only these in-site destinations may be requested through ?next=
+const allowedNext = ['/modshub'];
+
 // GET Admin - Login Page
 router.get('/admin', (req, res, next) => {
     try {
@@ -32,7 +35,8 @@ router.get('/admin', (req, res, next) => {
         title: "Admin",
         description: "Simple Blog created with NodeJs, Express & MongoDb."
       }
-      res.render('admin/index', { locals, layout: adminLayout });
+      const nextUrl = allowedNext.includes(req.query.next) ? req.query.next : '';
+      res.render('admin/index', { locals, nextUrl, layout: adminLayout });
     } catch (error) {
       next(error);
     }
@@ -62,7 +66,8 @@ router.post('/admin', async (req, res, next) => {
         secure: process.env.NODE_ENV === 'production',
       });
 
-      res.redirect('/dashboard')
+      const nextUrl = allowedNext.includes(req.body.next) ? req.body.next : '/dashboard';
+      res.redirect(nextUrl)
     } catch (error) {
       next(error);
     }
