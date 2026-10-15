@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { Button, Icon } from '../ui.jsx';
+import { downloadPostImage } from '../../core/download-image.js';
 
 export default function ImageField({ post }) {
-  const { actions } = useStudio();
+  const { actions, toast } = useStudio();
   const inputRef = useRef(null);
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -21,6 +22,12 @@ export default function ImageField({ post }) {
     if (!/^https?:\/\/\S+$/i.test(value)) return;
     actions.updatePost(post.id, { image: { src: value, alt: (image && image.alt) || '' } });
     setUrl('');
+  };
+
+  const download = async () => {
+    const r = await downloadPostImage(post);
+    if (r.ok) toast('Image downloaded');
+    else if (r.opened) toast('Opened the image in a new tab — use “Save image as…” there', 'info');
   };
 
   return (
@@ -48,13 +55,18 @@ export default function ImageField({ post }) {
               if (file) upload(file);
             }}
           />
-          <Button variant="soft" size="sm" icon="upload" disabled={busy} onClick={() => inputRef.current.click()}>
-            {busy ? 'Uploading…' : image ? 'Replace image' : 'Upload image'}
+          <Button variant={image ? 'soft' : 'primary'} size="sm" icon="upload" disabled={busy} onClick={() => inputRef.current.click()} data-testid="attach-image">
+            {busy ? 'Uploading…' : image ? 'Replace image' : 'Attach image'}
           </Button>
           {image ? (
-            <Button variant="ghost" size="sm" icon="trash" onClick={() => actions.updatePost(post.id, { image: null })}>
-              Remove
-            </Button>
+            <>
+              <Button variant="primary" size="sm" icon="download" onClick={download} data-testid="download-attachment">
+                Download image
+              </Button>
+              <Button variant="ghost" size="sm" icon="trash" onClick={() => actions.updatePost(post.id, { image: null })}>
+                Remove
+              </Button>
+            </>
           ) : null}
         </div>
         <label className="ms-field">
@@ -81,7 +93,7 @@ export default function ImageField({ post }) {
             />
           </label>
         ) : null}
-        <p className="ms-hint">PNG, JPEG, WebP or GIF up to 3 MB. Uploaded images are stored privately with your account.</p>
+        <p className="ms-hint">PNG, JPEG, WebP or GIF up to 3 MB. Shown under the message in the preview and used as the cover of the picture export.</p>
       </div>
     </div>
   );

@@ -36,6 +36,23 @@ test('calendar renders seeded posts in month, week, day and list modes', async (
   }
 });
 
+test('week and day blocks show the full title, not a clipped sliver', async ({ page }) => {
+  await login(page, 'tester', 6);
+  await page.getByRole('tab', { name: 'Week', exact: true }).click();
+  const blocks = page.locator('.ms-block:not(.ms-block--free)');
+  await expect(blocks.first()).toBeVisible();
+  const count = await blocks.count();
+  expect(count).toBeGreaterThan(0);
+  for (let i = 0; i < count; i += 1) {
+    const block = await blocks.nth(i).boundingBox();
+    const title = await blocks.nth(i).locator('.ms-block__title').boundingBox();
+    expect(title.height).toBeGreaterThan(8);
+    expect(title.y).toBeGreaterThanOrEqual(block.y - 1);
+    expect(title.y + title.height).toBeLessThanOrEqual(block.y + block.height + 1);
+    await expect(blocks.nth(i).locator('.ms-block__title')).not.toHaveText('');
+  }
+});
+
 test('Discord message: formatting renders like Discord and autosave says Saved', async ({ page }) => {
   await login(page);
   await newPost(page);
@@ -160,6 +177,44 @@ test('JSON tab: pasting a Discohook message replaces the content', async ({ page
   await expect(page.locator(MAIN)).toHaveValue('From Discohook **yes**');
   await expect(page.locator('.dc-username')).toHaveText('Bot');
   await expect(page.locator('.dc-embed__title')).toHaveText('T');
+});
+
+// 1x1 PNG
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+
+test('attach an image: shown in the Discord preview, downloadable in one click', async ({ page }) => {
+  await login(page);
+  await newPost(page);
+  await type(page, 'Post with a picture');
+  await expect(page.locator('.dc-attachment')).toHaveCount(0);
+  await page.locator('.ms-attachment input[type=file]').setInputFiles({ name: 'cover shot.png', mimeType: 'image/png', buffer: PNG_1PX });
+  const preview = page.locator('.dc-root .dc-attachment img');
+  await expect(preview).toBeVisible({ timeout: 8000 });
+  await expect(preview).toHaveAttribute('src', /\/modshub\/api\/assets\/[a-f0-9]+$/);
+
+  // one click on the editor button
+  const [d1] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-attachment').click()]);
+  expect(d1.suggestedFilename()).toMatch(/-image\.png$/);
+  expect(fs.readFileSync(await d1.path()).equals(PNG_1PX)).toBe(true);
+
+  // one click on the button over the preview image
+  await page.locator('.dc-attachment').hover();
+  const [d2] = await Promise.all([page.waitForEvent('download'), page.locator('.dc-attachment__dl').click()]);
+  expect(fs.readFileSync(await d2.path()).equals(PNG_1PX)).toBe(true);
+
+  // header and export panel shortcuts
+  const [d3] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-image-header').click()]);
+  expect(d3.suggestedFilename()).toMatch(/\.png$/);
+  const [d4] = await Promise.all([page.waitForEvent('download'), page.getByTestId('download-attachment-export').click()]);
+  expect(d4.suggestedFilename()).toMatch(/\.png$/);
+
+  await expect(page.locator('.ms-save')).toContainText('Saved', { timeout: 6000 });
+  const data = await bootstrap(page);
+  expect(data.posts[0].image.src).toMatch(/^\/modshub\/api\/assets\//);
+
+  // removing it clears the preview
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.locator('.dc-attachment')).toHaveCount(0);
 });
 
 test('downloads a real PNG with the preset size', async ({ page }) => {

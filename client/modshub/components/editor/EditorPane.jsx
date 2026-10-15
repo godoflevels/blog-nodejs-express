@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { Button, IconButton, Icon, Menu, Modal, StatusPill, useMedia } from '../ui.jsx';
 import MetaFields from './MetaFields.jsx';
-import ImageField from './ImageField.jsx';
+import { downloadPostImage } from '../../core/download-image.js';
 import MessageComposer from '../discord/MessageComposer.jsx';
 import JsonEditor from '../discord/JsonEditor.jsx';
 import { DiscordIssues } from '../preview/PreviewPane.jsx';
@@ -44,7 +44,7 @@ function NameDialog({ title, label, initial, confirmLabel, onSubmit, onClose }) 
 }
 
 export default function EditorPane({ post, onBack }) {
-  const { ui, setUi, actions, conflicts, saveState } = useStudio();
+  const { ui, setUi, actions, conflicts, saveState, toast } = useStudio();
   const [templateDialog, setTemplateDialog] = useState(false);
   const narrow = useMedia('(max-width: 767px)');
   const [detailsOpen, setDetailsOpen] = useState(!narrow);
@@ -72,6 +72,21 @@ export default function EditorPane({ post, onBack }) {
         <Button variant="primary" size="sm" icon="copy" className="ms-editor__copy" data-testid="copy-text" onClick={() => actions.copyPost(post)}>
           Copy text
         </Button>
+        {post.image ? (
+          <Button
+            variant="soft"
+            size="sm"
+            icon="download"
+            data-testid="download-image-header"
+            onClick={async () => {
+              const r = await downloadPostImage(post);
+              if (r.ok) toast('Image downloaded');
+              else if (r.opened) toast('Opened the image in a new tab — use “Save image as…” there', 'info');
+            }}
+          >
+            Image
+          </Button>
+        ) : null}
         <Menu
           label="Post actions"
           trigger={<IconButton icon="more" label="Post actions" />}
@@ -110,13 +125,6 @@ export default function EditorPane({ post, onBack }) {
         <details className="ms-details" open={detailsOpen} onToggle={(e) => setDetailsOpen(e.currentTarget.open)}>
           <summary>Schedule and details</summary>
           <MetaFields post={post} />
-        </details>
-
-        <details className="ms-details">
-          <summary>
-            Cover image for the picture export {post.image ? <span className="ms-details__badge">1</span> : null}
-          </summary>
-          <ImageField post={post} />
         </details>
 
         <div className="ms-editor__modes">

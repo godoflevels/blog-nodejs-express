@@ -406,13 +406,22 @@ function createModshubRouter({
       if (!ASSET_ID_RE.test(req.params.id)) return apiError(res, 404, 'not_found', 'Not found');
       const asset = await store.getAsset(req.ownerId, req.params.id);
       if (!asset) return apiError(res, 404, 'not_found', 'Not found');
-      res.set({
+      const headers = {
         'Content-Type': asset.mime,
         'Content-Length': String(asset.data.length),
         'Cache-Control': 'private, max-age=31536000, immutable',
         'X-Content-Type-Options': 'nosniff',
         'Content-Security-Policy': "default-src 'none'; sandbox",
-      });
+      };
+      if (req.query.download !== undefined) {
+        const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[asset.mime] || 'bin';
+        const requested = typeof req.query.name === 'string' ? req.query.name : '';
+        const base = (requested || asset.name || 'image').replace(/\.[A-Za-z0-9]{2,5}$/, '').replace(/[\r\n"\\/]/g, '').slice(0, 80) || 'image';
+        const file = `${base}.${ext}`;
+        const ascii = file.replace(/[^\x20-\x7e]/g, '_');
+        headers['Content-Disposition'] = `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file)}`;
+      }
+      res.set(headers);
       res.end(asset.data);
     } catch (e) {
       next(e);

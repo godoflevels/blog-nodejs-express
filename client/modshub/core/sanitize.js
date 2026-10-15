@@ -11,15 +11,15 @@ const TAGS = [
   'strong', 'b', 'em', 'i', 'del', 's', 'u', 'code', 'pre', 'blockquote',
   'ul', 'ol', 'li', 'a', 'img',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
-  'input', 'sup', 'sub', 'small',
+  'input', 'sup', 'sub', 'small', 'button',
 ];
 const ATTRS = [
   'href', 'src', 'alt', 'title', 'class', 'type', 'checked', 'disabled', 'start',
-  'align', 'target', 'rel', 'colspan', 'rowspan', 'data-lang', 'aria-hidden',
+  'align', 'target', 'rel', 'colspan', 'rowspan', 'data-lang', 'data-dl', 'aria-hidden', 'aria-label',
 ];
 // With a custom ALLOWED_URI_REGEXP DOMPurify validates every attribute that is
 // not "URI safe" against it, so plain-value attributes must be listed here.
-const URI_SAFE_ATTRS = ['target', 'rel', 'data-lang', 'type', 'align', 'start', 'colspan', 'rowspan', 'aria-hidden', 'checked', 'disabled'];
+const URI_SAFE_ATTRS = ['target', 'rel', 'data-lang', 'data-dl', 'type', 'align', 'start', 'colspan', 'rowspan', 'aria-hidden', 'checked', 'disabled'];
 const URI = /^(?:https?:|mailto:|tel:|\/(?!\/)|#|data:image\/(?:png|jpeg|gif|webp);base64,)/i;
 
 let purifier = null;

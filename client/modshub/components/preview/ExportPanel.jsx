@@ -1,8 +1,11 @@
 import { Button, Icon } from '../ui.jsx';
+import { downloadPostImage } from '../../core/download-image.js';
+import { useStudio } from '../../state/StudioContext.jsx';
 import { useExportActions } from './useExportActions.jsx';
 
 export default function ExportPanel({ post, rendered, imageExport, onOpenImage }) {
   const { copy, download, dialog } = useExportActions(post, rendered.plain, rendered.mdOptions);
+  const { toast } = useStudio();
   const { busy, state } = imageExport;
   const slides = state.slides.length;
 
@@ -34,6 +37,21 @@ export default function ExportPanel({ post, rendered, imageExport, onOpenImage }
           <Button variant="soft" size="sm" icon="download" onClick={() => download('md')}>Message text (.md)</Button>
           <Button variant="soft" size="sm" icon="download" onClick={() => download('txt')}>Plain Text (.txt)</Button>
           <Button variant="soft" size="sm" icon="download" onClick={() => download('webhook')}>Webhook JSON</Button>
+          {post.image ? (
+            <Button
+              variant="primary"
+              size="sm"
+              icon="download"
+              data-testid="download-attachment-export"
+              onClick={async () => {
+                const r = await downloadPostImage(post);
+                if (r.ok) toast('Image downloaded');
+                else if (r.opened) toast('Opened the image in a new tab — use “Save image as…” there', 'info');
+              }}
+            >
+              Attached image
+            </Button>
+          ) : null}
           <Button variant="soft" size="sm" icon="download" onClick={() => download('json')}>Post JSON</Button>
           <Button
             variant="primary"

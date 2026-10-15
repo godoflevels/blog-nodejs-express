@@ -176,7 +176,7 @@ function createMemoryStore() {
 
     async getAsset(ownerId, id) {
       const a = bucket(assets, ownerId).get(id);
-      return a ? { mime: a.mime, data: Buffer.from(a.data) } : null;
+      return a ? { mime: a.mime, name: a.name || '', data: Buffer.from(a.data) } : null;
     },
 
     async assetExists(ownerId, id) {

@@ -4,6 +4,7 @@ import { Button, Icon } from '../ui.jsx';
 import MarkdownEditor from '../editor/MarkdownEditor.jsx';
 import DiscordToolbar from './DiscordToolbar.jsx';
 import EmbedEditor from './EmbedEditor.jsx';
+import ImageField from '../editor/ImageField.jsx';
 import { DISCORD_LIMITS } from '../../core/discord.js';
 
 /** Discohook style message builder: identity, text with Discord formatting, embeds. */
@@ -83,6 +84,13 @@ export default function MessageComposer({ post }) {
           placeholder={'Type the message like in Discord…\n\n# Big heading\n**bold**  __underline__  *italic*  ~~strike~~  ||spoiler||\n> quote\n-# small text'}
         />
       </div>
+
+      <section className="ms-attachment" aria-label="Attachment">
+        <h3 className="ms-composer__subhead">
+          <Icon name="image" size={16} /> Attachment
+        </h3>
+        <ImageField post={post} />
+      </section>
 
       <EmbedEditor post={post} embeds={d.embeds} onChange={(embeds) => saveDiscord({ ...d, embeds })} />
     </section>

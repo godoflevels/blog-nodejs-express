@@ -157,7 +157,7 @@ export default function TimeGridView({ posts, mode }) {
                     }}
                     style={{
                       top: (start / 60) * HOUR_H,
-                      height: Math.max(26, (BLOCK_MIN / 60) * HOUR_H - 2),
+                      height: Math.max(28, (BLOCK_MIN / 60) * HOUR_H - 2),
                       left: `calc(${(lane / lanes) * 100}% + 2px)`,
                       width: `calc(${100 / lanes}% - 4px)`,
                     }}

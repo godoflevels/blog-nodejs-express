@@ -254,6 +254,20 @@ test('asset upload, serving, ownership and orphan cleanup', async () => {
   assert.equal(gone.status, 404);
 });
 
+test('asset ?download=1 sends a download header with the original name', async () => {
+  const up = await call('POST', '/api/assets', { raw: PNG_1PX, headers: { 'content-type': 'image/png', 'x-filename': encodeURIComponent('Моя картинка.png') } });
+  assert.equal(up.status, 201);
+  const url = base.replace('/modshub', '') + up.json.src;
+  const inline = await fetch(url, { headers: { cookie: ALICE } });
+  assert.equal(inline.headers.get('content-disposition'), null);
+  const dl = await fetch(`${url}?download=1`, { headers: { cookie: ALICE } });
+  assert.equal(dl.status, 200);
+  const disposition = dl.headers.get('content-disposition');
+  assert.match(disposition, /^attachment; filename="/);
+  assert.ok(disposition.includes(encodeURIComponent('Моя картинка.png')));
+  assert.deepEqual(Buffer.from(await dl.arrayBuffer()), PNG_1PX);
+});
+
 test('delete is idempotent', async () => {
   assert.equal((await call('DELETE', '/api/posts/never-existed')).status, 200);
 });

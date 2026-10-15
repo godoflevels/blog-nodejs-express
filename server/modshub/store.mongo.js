@@ -291,7 +291,7 @@ function createMongoStore(connection) {
       if (!doc) return null;
       // lean() returns a BSON Binary for Buffer fields on some driver versions.
       const raw = doc.data && doc.data.buffer ? Buffer.from(doc.data.buffer) : Buffer.from(doc.data);
-      return { mime: doc.mime, data: raw };
+      return { mime: doc.mime, name: doc.name || '', data: raw };
     },
 
     async assetExists(ownerId, id) {

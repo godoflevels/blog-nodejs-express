@@ -110,8 +110,12 @@ export function messageHtml(post, env = {}) {
   const initial = esc([...name][0] || 'M').toUpperCase();
   const content = post.content ? `<div class="dc-content">${contentHtml(post.content, env)}</div>` : '';
   const embeds = ((d.embeds || []).map((e) => embedHtml(e, env))).join('');
+  const imageSrc = post.image && post.image.src && /^(https?:\/\/|\/modshub\/)/i.test(post.image.src) ? esc(post.image.src) : '';
+  const attachment = imageSrc
+    ? `<div class="dc-attachment"><img src="${imageSrc}" alt="${esc(post.image.alt || 'Attached image')}"><button type="button" class="dc-attachment__dl" data-dl="1" aria-label="Download image" title="Download image">Download</button></div>`
+    : '';
   const html = `<div class="dc-message"><div class="dc-avatar">${
     avatar ? `<img src="${avatar}" alt="">` : `<span>${initial}</span>`
-  }</div><div class="dc-body"><div class="dc-head"><span class="dc-username">${esc(name)}</span><span class="dc-app">APP</span><span class="dc-time">${esc(when)}</span></div>${content}${embeds}</div></div>`;
+  }</div><div class="dc-body"><div class="dc-head"><span class="dc-username">${esc(name)}</span><span class="dc-app">APP</span><span class="dc-time">${esc(when)}</span></div>${content}${attachment}${embeds}</div></div>`;
   return sanitizeHtml(html, { allowStyle: true });
 }
