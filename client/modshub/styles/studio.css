@@ -2728,3 +2728,13 @@ input.ms-editor__title:focus { background: var(--card); box-shadow: 0 0 0 3px va
   .ms-mbar .ms-calendar__title { font-size: 20px; }
   .ms-mbar { padding-left: 10px; padding-right: 10px; }
 }
+
+/* a narrow editor column (preview and list open next to it) keeps the title readable */
+.ms-editor { container-type: inline-size; container-name: ed; }
+@container ed (max-width: 600px) {
+  .ms-editor__copy .ms-btn__label,
+  .ms-editor__img .ms-btn__label,
+  .ms-editor__save .ms-save__text { display: none; }
+  .ms-editor__copy, .ms-editor__img { padding: 0 10px; }
+  .ms-editor__bar { gap: 4px; }
+}
