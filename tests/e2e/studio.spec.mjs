@@ -625,3 +625,64 @@ for (const width of [768, 820]) {
     await expect(page.getByRole('tab', { name: 'Posts' })).toBeVisible();
   });
 }
+
+const RIGHT = {
+  'What is the tagline': 'Your game. Modded right.',
+  'ModsHub used to be': 'Fivemods',
+  'Realistic Stars, one': 'Improvements',
+  'Which of these mods belongs': 'European Roads',
+  'ENB graphics preset': 'Ray Fusion Remastered',
+  'car from the Real Cars': 'Pfister Boxster',
+  'Which of these is a weapon skin': 'Glock | Tactical Elite',
+  'Realistic Weapons Sounds': 'Audio',
+  'What does ModsHub+ remove': 'Download queues',
+  'one-time purchase': 'ModsHub Infinity',
+};
+const playQuiz = async (page, wrong) => {
+  await page.goto('/quiz');
+  await page.getByRole('button', { name: /Start the quiz/ }).click();
+  for (let n = 0; n < 10; n += 1) {
+    const text = await page.locator('.question').textContent();
+    const key = Object.keys(RIGHT).find((k) => text.includes(k));
+    const rightLabel = RIGHT[key];
+    const labels = await page.locator('.opt .label').allInnerTexts();
+    const pick = n < wrong ? labels.find((l) => l !== rightLabel) : rightLabel;
+    await page.locator('.opt', { hasText: pick }).first().click();
+    await expect(page.locator('.feedback')).toBeVisible();
+    await page.locator('.nextbar .btn').click();
+  }
+};
+
+test('quiz: a perfect run unlocks the 50% promo code, which can be copied', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/quiz');
+  expect(await page.content()).not.toContain('QUIZ50');
+  await playQuiz(page, 0);
+  await expect(page.getByRole('heading', { name: /perfect score/i })).toBeVisible();
+  await expect(page.locator('.score')).toHaveAttribute('aria-label', 'Score 10 out of 10');
+  await expect(page.locator('#promo')).toHaveText('QUIZ50');
+  await page.getByRole('button', { name: /Copy/ }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('QUIZ50');
+});
+
+test('quiz: three wrong answers still pass, four do not and no code is shown', async ({ page }) => {
+  await playQuiz(page, 3);
+  await expect(page.locator('#promo')).toHaveText('QUIZ50');
+  await playQuiz(page, 4);
+  await expect(page.locator('#promo')).toHaveCount(0);
+  await expect(page.getByText('You need 7 out of 10')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Try again/ })).toBeVisible();
+});
+
+for (const width of [320, 390, 1440]) {
+  test(`quiz: no horizontal overflow at ${width}px on every screen`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    const overflow = () => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    await page.goto('/quiz');
+    await expect(page.getByRole('button', { name: /Start the quiz/ })).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    await playQuiz(page, 0);
+    await expect(page.locator('#promo')).toBeVisible();
+    expect(await overflow()).toBeLessThanOrEqual(0);
+  });
+}

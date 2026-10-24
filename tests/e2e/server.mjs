@@ -26,6 +26,7 @@ app.use('/modshub', createModshubRouter({
   workspaceId: WORKSPACE,
   resolveUsername: async (id) => id,
 }));
+app.use('/quiz', require('../../server/quiz').router);
 app.use(express.static(path.join(ROOT, 'public')));
 
 app.get('/admin', (req, res) => res.type('html').send('<h1>Sign in</h1><p id="login-page">admin login</p>'));

@@ -43,6 +43,9 @@ mongoose.connection.once('open', () => {
     .catch((error) => console.error('ModsHub Studio: workspace merge failed', error));
 });
 
+// ModsHub Quiz (/quiz): static page in public/quiz, answers and promo code stay in the API.
+app.use('/quiz', require('./server/quiz').router);
+
 app.use(express.urlencoded({ extended: true })); // turn on HTML Forms
 app.use(express.json()); // turn on JSON
 app.use(cookieParser());
