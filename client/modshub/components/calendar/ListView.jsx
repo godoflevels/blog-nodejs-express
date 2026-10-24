@@ -84,8 +84,8 @@ export function DayAgenda({ date, items, free = [], onCreate, onToggleFree, onOp
       <header>
         <h3>{formatDayShort(date)}</h3>
         <span className="ms-agenda__actions">
-          <Button variant={allDay ? 'soft' : 'ghost'} size="sm" icon="star" className={allDay ? 'ms-btn--free-on' : ''} onClick={onToggleFree}>{allDay ? 'Unmark free' : 'Mark free'}</Button>
-          <Button variant="soft" size="sm" icon="plus" onClick={onCreate}>New</Button>
+          <Button variant={allDay ? 'soft' : 'ghost'} size="sm" icon="star" className={allDay ? 'ms-btn--free-on' : ''} title={allDay ? 'Remove the free marker' : 'Mark this day as free'} onClick={onToggleFree}>{allDay ? 'Unmark free' : 'Mark free'}</Button>
+          <Button variant="soft" size="sm" icon="plus" title="New post on this day" onClick={onCreate}>New</Button>
         </span>
       </header>
       {free.map(({ slot, time }) => (

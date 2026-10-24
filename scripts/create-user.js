@@ -90,5 +90,14 @@ function askHidden(question) {
   }
 })().catch((error) => {
   console.error(error.message || error);
+  // A leftover unique index on some other field (for example a misspelt
+  // "usename") makes every new user collide on { field: null }.
+  const stray = error && error.code === 11000 && /index: (\w+)_1 dup key/.exec(error.message || '');
+  if (stray && stray[1] !== 'username') {
+    console.error(
+      `\nThe users collection has a unique index "${stray[1]}_1" on a field the app does not use, so the second user cannot be created.` +
+        `\nCheck it in mongosh with db.users.getIndexes(), and drop it with db.users.dropIndex("${stray[1]}_1") if no document has that field.`
+    );
+  }
   process.exit(1);
 });

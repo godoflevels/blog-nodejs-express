@@ -612,3 +612,16 @@ test('phone: tapping a day in the month shows its posts and swiping pages the mo
   await expect(title).not.toHaveText(start);
   await ctx.close();
 });
+
+for (const width of [768, 820]) {
+  test(`tablet ${width}px: month shows dots and the picked day's posts, not clipped chips`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await login(page, 'tester', 12);
+    await expect(page.locator('.ms-cell__dots .ms-dot-s').first()).toBeVisible();
+    const cell = page.locator('.ms-cell:not(.is-outside):has(.ms-dot-s)').first();
+    await cell.click();
+    await expect(cell).toHaveClass(/is-picked/);
+    await expect(page.locator('.ms-agenda .ms-row').first()).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Posts' })).toBeVisible();
+  });
+}

@@ -9,7 +9,8 @@ const MAX_CHIPS = 3;
 
 export default function MonthView({ posts }) {
   const { ui, setUi, settings, displayZone, actions } = useStudio();
-  const compact = useMedia('(max-width: 767px)');
+  // Same breakpoint as the phone layout: dots and the day's posts below.
+  const compact = useMedia('(max-width: 899px)');
   const fine = useMedia('(pointer: fine)');
   const groups = useDayGroups(posts);
   const slotGroups = useSlotGroups();
