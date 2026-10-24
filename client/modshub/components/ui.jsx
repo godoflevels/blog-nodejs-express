@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useStudio } from '../state/StudioContext.jsx';
 import { STATUS_META } from '../constants.js';
@@ -55,6 +55,13 @@ const P = {
   sun: <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4" />,
   star: <path d="M12 4l2.4 5 5.4.7-4 3.7 1 5.4L12 16.2 7.2 18.8l1-5.4-4-3.7 5.4-.7z" />,
   home: <path d="M4 11l8-6.5 8 6.5M6 9.5V20h12V9.5" />,
+  chevronUp: <path d="M6 15l6-6 6 6" />,
+  user: (<><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" /></>),
+  globe: (<><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.4 2.4 3.4 5.3 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.3-3.4-8.5s1-6.1 3.4-8.5z" /></>),
+  sliders: (<><path d="M4 7h9M19 7h1M4 17h1M11 17h9" /><circle cx="16" cy="7" r="2.5" /><circle cx="8" cy="17" r="2.5" /></>),
+  layers: (<><path d="M12 4l8.5 4.5L12 13 3.5 8.5z" /><path d="M3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5" /></>),
+  send: <path d="M20.5 3.5L10 14M20.5 3.5L14 20.5l-4-6.5-6.5-4z" />,
+  cornerDown: <path d="M5 5v6a3 3 0 0 0 3 3h11M15 10l4 4-4 4" />,
 };
 
 export function Icon({ name, size = 18, className = '', title }) {
@@ -138,58 +145,283 @@ export function IconButton({ icon, label, active, className = '', size = 18, ...
   );
 }
 
-/* ----------------------------------------------------------------- menu -- */
+/* -------------------------------------------------------------- popover -- */
+
+export const PHONE_QUERY = '(max-width: 767px)';
+
+const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
 
 /**
- * items: [{label, icon, onClick, danger, disabled, checked, divider, hint}]
+ * A panel anchored to its trigger on desktop and a bottom sheet on phones.
+ * The panel is rendered in a portal so no scrolling or clipping parent can
+ * cut it off. `children` may be a function that receives `close`.
+ *
+ * placement: 'bottom-end' | 'bottom-start' | 'top-start' | 'top-end' | 'right-start'
  */
-export function Menu({ trigger, items, align = 'right', label = 'Menu', className = '' }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  const close = useCallback(() => setOpen(false), []);
-  useOutsideClose(ref, close, open);
+export function Popover({
+  trigger,
+  children,
+  placement = 'bottom-end',
+  label,
+  title,
+  role = 'dialog',
+  className = '',
+  panelClassName = '',
+  onOpenChange,
+}) {
+  const [open, setOpenState] = useState(false);
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const phone = useMedia(PHONE_QUERY);
+
+  const setOpen = useCallback(
+    (value) => {
+      setOpenState(value);
+      if (!value) setPos(null);
+      if (onOpenChange) onOpenChange(value);
+    },
+    [onOpenChange]
+  );
+  const close = useCallback(() => setOpen(false), [setOpen]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if ((triggerRef.current && triggerRef.current.contains(e.target)) || (panelRef.current && panelRef.current.contains(e.target))) return;
+      close();
+    };
+    // Window + capture so an Escape inside a dialog closes only the popover.
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      close();
+      const focusable = triggerRef.current && triggerRef.current.querySelector('button, [href], input');
+      if (focusable) focusable.focus({ preventScroll: true });
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown, { passive: true });
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [open, close]);
+
+  // Anchored placement (desktop only).
+  useLayoutEffect(() => {
+    if (!open || phone) return undefined;
+    const place = () => {
+      if (!triggerRef.current || !panelRef.current) return;
+      const t = triggerRef.current.getBoundingClientRect();
+      const el = panelRef.current;
+      const prev = el.style.maxHeight;
+      el.style.maxHeight = 'none';
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      el.style.maxHeight = prev;
+      const M = 8;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const [side, align] = placement.split('-');
+      let left;
+      let top;
+      if (side === 'right') {
+        left = t.right + 10;
+        top = t.top;
+      } else {
+        left = align === 'end' ? t.right - w : t.left;
+        top = side === 'top' ? t.top - h - 8 : t.bottom + 8;
+      }
+      left = clamp(left, M, Math.max(M, vw - w - M));
+      if (side === 'bottom' && top + h > vh - M) {
+        const above = t.top - h - 8;
+        top = above >= M ? above : Math.max(M, vh - h - M);
+      }
+      top = clamp(top, M, Math.max(M, vh - Math.min(h, vh - 2 * M) - M));
+      setPos({ top, left, maxHeight: vh - top - M });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, phone, placement]);
+
+  useEffect(() => {
+    if (!open || !phone) return undefined;
+    document.body.classList.add('ms-noscroll');
+    return () => document.body.classList.remove('ms-noscroll');
+  }, [open, phone]);
+
+  // Move focus into the panel; arrow keys walk through menu items.
+  useEffect(() => {
+    if (!open || !panelRef.current) return;
+    const first = panelRef.current.querySelector('input[data-autofocus], [role="menuitem"]:not([disabled]), [role="option"]:not([disabled])');
+    (first || panelRef.current).focus({ preventScroll: true });
+  }, [open]);
+  const onPanelKey = (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const items = [...panelRef.current.querySelectorAll('[role="menuitem"]:not([disabled]), [role="option"]:not([disabled])')];
+    if (items.length === 0) return;
+    e.preventDefault();
+    const at = items.indexOf(document.activeElement);
+    const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+    items[next].focus();
+  };
+
+  const toggle = () => setOpen(!open);
+  const triggerNode = typeof trigger === 'function' ? trigger({ open }) : trigger;
+  const enhanced = isValidElement(triggerNode)
+    ? cloneElement(triggerNode, {
+        'aria-haspopup': role === 'menu' ? 'menu' : role === 'listbox' ? 'listbox' : 'dialog',
+        'aria-expanded': open,
+        onClick: (e) => {
+          if (triggerNode.props.onClick) triggerNode.props.onClick(e);
+          toggle();
+        },
+      })
+    : triggerNode;
+
   return (
-    <div className={`ms-menu ${className}`} ref={ref}>
-      <span
-        onClick={() => setOpen((o) => !o)}
-        role="presentation"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={label}
-      >
-        {typeof trigger === 'function' ? trigger({ open }) : trigger}
-      </span>
-      {open ? (
-        <div className={`ms-menu__list ms-menu__list--${align}`} role="menu">
-          {items.map((item, i) =>
-            item.divider ? (
-              <div className="ms-menu__divider" key={`d${i}`} role="separator" />
-            ) : item.heading ? (
-              <div className="ms-menu__heading" key={`h${i}`}>{item.heading}</div>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                key={item.label + i}
-                className={`ms-menu__item ${item.danger ? 'is-danger' : ''}`}
-                disabled={item.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  item.onClick && item.onClick();
-                }}
+    <span className={`ms-menu ${className}`} ref={triggerRef} data-label={label}>
+      {enhanced}
+      {open
+        ? createPortal(
+            <>
+              <div className="ms-sheet-backdrop" onClick={close} aria-hidden="true" />
+              <div
+                ref={panelRef}
+                className={`ms-pop ${phone ? 'is-sheet' : ''} ${panelClassName}`}
+                role={role}
+                aria-label={title || label}
+                tabIndex={-1}
+                onKeyDown={onPanelKey}
+                style={phone || !pos ? (phone ? undefined : { visibility: 'hidden', top: 0, left: 0 }) : pos}
               >
-                {item.icon ? <Icon name={item.icon} size={16} /> : <span className="ms-menu__spacer" />}
-                <span className="ms-menu__text">
-                  {item.label}
-                  {item.hint ? <small>{item.hint}</small> : null}
-                </span>
-                {item.checked ? <Icon name="check" size={16} className="ms-menu__check" /> : null}
-              </button>
-            )
-          )}
+                <div className="ms-grabber" aria-hidden="true" />
+                {title ? <div className="ms-pop__title">{title}</div> : null}
+                {typeof children === 'function' ? children(close) : children}
+              </div>
+            </>,
+            document.body
+          )
+        : null}
+    </span>
+  );
+}
+
+function OptionList({ options, close, onPick, searchable, role, emptyText = 'Nothing found' }) {
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    if (!q.trim()) return options;
+    const needle = q.trim().toLocaleLowerCase();
+    return options.filter((o) => o.divider || o.heading ? false : `${o.label} ${o.hint || ''}`.toLocaleLowerCase().includes(needle));
+  }, [options, q]);
+  return (
+    <>
+      {searchable ? (
+        <div className="ms-pop__search">
+          <Icon name="search" size={16} />
+          <input
+            type="search"
+            value={q}
+            data-autofocus
+            placeholder="Search"
+            aria-label="Search options"
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
       ) : null}
-    </div>
+      <div className="ms-pop__list">
+        {shown.map((item, i) =>
+          item.divider ? (
+            <div className="ms-menu__divider" key={`d${i}`} role="separator" />
+          ) : item.heading ? (
+            <div className="ms-menu__heading" key={`h${i}`}>{item.heading}</div>
+          ) : (
+            <button
+              type="button"
+              role={role}
+              aria-selected={role === 'option' ? Boolean(item.checked) : undefined}
+              key={`${item.value ?? item.label}${i}`}
+              className={`ms-menu__item ${item.danger ? 'is-danger' : ''} ${item.checked ? 'is-checked' : ''}`}
+              disabled={item.disabled}
+              onClick={() => {
+                close();
+                if (onPick) onPick(item);
+                else if (item.onClick) item.onClick();
+              }}
+            >
+              {item.color ? <i className="ms-menu__swatch" style={{ background: item.color }} aria-hidden="true" /> : null}
+              {item.icon ? <Icon name={item.icon} size={18} /> : item.color ? null : <span className="ms-menu__spacer" />}
+              <span className="ms-menu__text">
+                {item.label}
+                {item.hint ? <small>{item.hint}</small> : null}
+              </span>
+              {item.checked ? <Icon name="check" size={16} className="ms-menu__check" /> : null}
+            </button>
+          )
+        )}
+        {shown.length === 0 ? <p className="ms-pop__empty">{emptyText}</p> : null}
+      </div>
+    </>
+  );
+}
+
+/**
+ * items: [{label, icon, onClick, danger, disabled, checked, divider, heading, hint}]
+ */
+export function Menu({ trigger, items, align = 'right', placement, label = 'Menu', title, className = '', searchable = false }) {
+  return (
+    <Popover
+      trigger={trigger}
+      placement={placement || (align === 'left' ? 'bottom-start' : 'bottom-end')}
+      label={label}
+      title={title}
+      role="menu"
+      className={className}
+      panelClassName="ms-pop--menu"
+    >
+      {(close) => <OptionList options={items} close={close} searchable={searchable} role="menuitem" />}
+    </Popover>
+  );
+}
+
+/**
+ * A field-like button that opens a list of options: a popover on desktop, a
+ * bottom sheet on phones. options: [{value, label, color?, hint?}]
+ */
+export function Select({ value, options, onChange, label, className = '', searchable = false, placeholder = 'Select…', variant = 'field', icon, placement = 'bottom-start', disabled = false }) {
+  const current = options.find((o) => o.value === value);
+  const items = options.map((o) => ({ ...o, checked: o.value === value }));
+  return (
+    <Popover
+      role="listbox"
+      label={label}
+      title={label}
+      placement={placement}
+      className={className}
+      panelClassName="ms-pop--menu"
+      trigger={
+        <button
+          type="button"
+          className={`ms-select ms-select--${variant}`}
+          aria-label={`${label}: ${current ? current.label : placeholder}`}
+          disabled={disabled}
+        >
+          {icon ? <Icon name={icon} size={16} /> : null}
+          {current && current.color ? <i className="ms-menu__swatch" style={{ background: current.color }} aria-hidden="true" /> : null}
+          <span className="ms-select__text">{current ? current.label : placeholder}</span>
+          <Icon name="chevronDown" size={14} className="ms-select__caret" />
+        </button>
+      }
+    >
+      {(close) => <OptionList options={items} close={close} searchable={searchable} role="option" onPick={(item) => onChange(item.value)} />}
+    </Popover>
   );
 }
 

@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
-import { Button, Icon, IconButton, Modal, useOutsideClose } from '../ui.jsx';
+import { useState } from 'react';
+import { Button, Icon, IconButton, Menu, Modal, Popover, Select } from '../ui.jsx';
+import { DateField, TimeField } from '../pickers.jsx';
 import { isMac } from '../editor/FormatToolbar.jsx';
 import { fromWall, wallParts } from '../../core/time.js';
 
@@ -67,22 +68,18 @@ function TimestampDialog({ post, onInsert, onClose }) {
         <p className="ms-hint">
           Shows the time in every reader's own timezone. Entered in the post's timezone ({post.timezone}).
         </p>
-        <label className="ms-field">
+        <div className="ms-field">
           <span>Date</span>
-          <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} data-autofocus />
-        </label>
-        <label className="ms-field">
+          <DateField label="Timestamp date" value={date} onChange={setDate} />
+        </div>
+        <div className="ms-field">
           <span>Time</span>
-          <input type="time" value={time} onChange={(e) => e.target.value && setTime(e.target.value)} />
-        </label>
-        <label className="ms-field">
+          <TimeField label="Timestamp time" value={time} onChange={setTime} />
+        </div>
+        <div className="ms-field">
           <span>Style</span>
-          <select value={style} onChange={(e) => setStyle(e.target.value)}>
-            {styles.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </label>
+          <Select label="Style" value={style} onChange={setStyle} options={styles.map(([value, label]) => ({ value, label }))} />
+        </div>
         {unix ? <code className="ms-code-line">{`<t:${unix}:${style}>`}</code> : null}
       </div>
     </Modal>
@@ -126,20 +123,16 @@ function IdDialog({ kind, onInsert, onClose }) {
 }
 
 export default function DiscordToolbar({ post, onCommand, canUndo, canRedo }) {
-  const [pop, setPop] = useState(null); // 'emoji' | 'mention'
   const [dialog, setDialog] = useState(null); // 'timestamp' | 'user' | 'role' | 'channel'
-  const holder = useRef(null);
-  useOutsideClose(holder, () => setPop(null), pop !== null);
   const keep = (e) => e.preventDefault();
 
   const insert = (text) => {
     onCommand('insert', text);
-    setPop(null);
     setDialog(null);
   };
 
   return (
-    <div className="ms-toolbar ms-toolbar--discord" role="toolbar" aria-label="Discord formatting" ref={holder}>
+    <div className="ms-toolbar ms-toolbar--discord" role="toolbar" aria-label="Discord formatting">
       {GROUPS.map((group, gi) => (
         <div className="ms-toolbar__group" key={gi}>
           {group.map((b) => {
@@ -163,31 +156,45 @@ export default function DiscordToolbar({ post, onCommand, canUndo, canRedo }) {
         </div>
       ))}
       <div className="ms-toolbar__group ms-toolbar__pop">
-        <button type="button" className="ms-iconbtn ms-iconbtn--text" aria-label="Emoji" title="Emoji" onMouseDown={keep} onClick={() => setPop(pop === 'emoji' ? null : 'emoji')}>
-          🙂
-        </button>
-        <button type="button" className="ms-iconbtn ms-iconbtn--text" aria-label="Mention" title="Mention (@everyone, @here, user, role, channel)" onMouseDown={keep} onClick={() => setPop(pop === 'mention' ? null : 'mention')}>
-          @
-        </button>
+        <Popover
+          label="Emoji"
+          title="Emoji"
+          placement="bottom-start"
+          panelClassName="ms-pop--emoji"
+          trigger={
+            <button type="button" className="ms-iconbtn ms-iconbtn--text" aria-label="Emoji" title="Emoji" onMouseDown={keep}>
+              🙂
+            </button>
+          }
+        >
+          {(close) => (
+            <div className="ms-emoji">
+              {EMOJI.map((e) => (
+                <button type="button" key={e} onMouseDown={keep} onClick={() => { close(); insert(e); }} aria-label={`Insert ${e}`}>
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
+        </Popover>
+        <Menu
+          label="Mention"
+          title="Mention"
+          align="left"
+          trigger={
+            <button type="button" className="ms-iconbtn ms-iconbtn--text" aria-label="Mention" title="Mention (@everyone, @here, user, role, channel)" onMouseDown={keep}>
+              @
+            </button>
+          }
+          items={[
+            { label: '@everyone', onClick: () => insert('@everyone') },
+            { label: '@here', onClick: () => insert('@here') },
+            { label: 'User…', onClick: () => setDialog('user') },
+            { label: 'Role…', onClick: () => setDialog('role') },
+            { label: 'Channel…', onClick: () => setDialog('channel') },
+          ]}
+        />
         <IconButton icon="clock" label="Timestamp (<t:…>)" onMouseDown={keep} onClick={() => setDialog('timestamp')} />
-        {pop === 'emoji' ? (
-          <div className="ms-popover ms-emoji" role="dialog" aria-label="Emoji">
-            {EMOJI.map((e) => (
-              <button type="button" key={e} onMouseDown={keep} onClick={() => insert(e)} aria-label={`Insert ${e}`}>
-                {e}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {pop === 'mention' ? (
-          <div className="ms-popover ms-mentions" role="menu">
-            <button type="button" role="menuitem" onMouseDown={keep} onClick={() => insert('@everyone')}>@everyone</button>
-            <button type="button" role="menuitem" onMouseDown={keep} onClick={() => insert('@here')}>@here</button>
-            <button type="button" role="menuitem" onClick={() => { setPop(null); setDialog('user'); }}>User…</button>
-            <button type="button" role="menuitem" onClick={() => { setPop(null); setDialog('role'); }}>Role…</button>
-            <button type="button" role="menuitem" onClick={() => { setPop(null); setDialog('channel'); }}>Channel…</button>
-          </div>
-        ) : null}
       </div>
       <div className="ms-toolbar__group">
         <IconButton icon="undo" label={`Undo (${MOD}Z)`} disabled={!canUndo} onMouseDown={keep} onClick={() => onCommand('undo')} />

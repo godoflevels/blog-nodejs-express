@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import schema from '../../../../server/modshub/schema.js';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { Button, Icon, Modal } from '../ui.jsx';
+import { Button, Icon, Modal, Select } from '../ui.jsx';
+import { DateField, TimeField } from '../pickers.jsx';
 import Prose from '../preview/Prose.jsx';
 import { parseImportFiles, IMPORT_LIMITS, extensionOf } from '../../core/import-files.js';
 import { JSON_TEMPLATE, formatIssue } from '../../core/json-io.js';
@@ -25,30 +26,32 @@ function TextItemFields({ item, onChange, categories, zone }) {
         <span>Title</span>
         <input type="text" value={item.post.title} maxLength={200} onChange={(e) => onChange({ post: { ...item.post, title: e.target.value } })} />
       </label>
-      <label className="ms-field">
+      <div className="ms-field">
         <span>Date</span>
-        <input type="date" value={wall.date} onChange={(e) => e.target.value && setWhen(e.target.value, wall.time)} />
-      </label>
-      <label className="ms-field">
+        <DateField label="Post date" value={wall.date} onChange={(date) => setWhen(date, wall.time)} />
+      </div>
+      <div className="ms-field">
         <span>Time</span>
-        <input type="time" value={wall.time} onChange={(e) => e.target.value && setWhen(wall.date, e.target.value)} />
-      </label>
-      <label className="ms-field">
+        <TimeField label="Post time" value={wall.time} onChange={(time) => setWhen(wall.date, time)} />
+      </div>
+      <div className="ms-field">
         <span>Status</span>
-        <select value={item.post.status} onChange={(e) => onChange({ post: { ...item.post, status: e.target.value } })}>
-          {STATUS_ORDER.map((s) => (
-            <option key={s} value={s}>{STATUS_META[s].label}</option>
-          ))}
-        </select>
-      </label>
-      <label className="ms-field">
+        <Select
+          label="Status"
+          value={item.post.status}
+          onChange={(status) => onChange({ post: { ...item.post, status } })}
+          options={STATUS_ORDER.map((s) => ({ value: s, label: STATUS_META[s].label, color: STATUS_META[s].color }))}
+        />
+      </div>
+      <div className="ms-field">
         <span>Category</span>
-        <select value={item.post.category} onChange={(e) => onChange({ post: { ...item.post, category: e.target.value } })}>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </label>
+        <Select
+          label="Category"
+          value={item.post.category}
+          onChange={(category) => onChange({ post: { ...item.post, category } })}
+          options={categories.map((c) => ({ value: c.id, label: c.name, color: c.color }))}
+        />
+      </div>
     </div>
   );
 }

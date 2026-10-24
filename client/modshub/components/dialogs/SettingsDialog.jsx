@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import schema from '../../../../server/modshub/schema.js';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { Button, Icon, IconButton, Modal } from '../ui.jsx';
+import { Button, Icon, IconButton, Modal, Select } from '../ui.jsx';
+import { TimeField } from '../pickers.jsx';
 import { listZones, browserZone } from '../../core/time.js';
 import { buildExport, stringifyExport, JSON_TEMPLATE } from '../../core/json-io.js';
 import { downloadText } from '../../core/filenames.js';
@@ -82,27 +83,36 @@ export default function SettingsDialog({ onClose, initialTab = 'general' }) {
 
         {tab === 'general' ? (
           <div className="ms-settings__section ms-form">
-            <label className="ms-field">
+            <div className="ms-field">
               <span>Calendar timezone</span>
-              <select value={settings.defaultTimezone} onChange={(e) => set({ defaultTimezone: e.target.value })}>
-                <option value="auto">This device ({browserZone()})</option>
-                {zones.map((z) => (
-                  <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>
-                ))}
-              </select>
+              <Select
+                label="Calendar timezone"
+                searchable
+                value={settings.defaultTimezone}
+                onChange={(defaultTimezone) => set({ defaultTimezone })}
+                options={[
+                  { value: 'auto', label: `This device (${browserZone()})` },
+                  ...zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') })),
+                ]}
+              />
               <small>The calendar grid and new posts use this zone. Each post keeps its own timezone.</small>
-            </label>
-            <label className="ms-field">
+            </div>
+            <div className="ms-field">
               <span>Week starts on</span>
-              <select value={settings.weekStart} onChange={(e) => set({ weekStart: Number(e.target.value) })}>
-                <option value={1}>Monday</option>
-                <option value={0}>Sunday</option>
-              </select>
-            </label>
-            <label className="ms-field">
+              <Select
+                label="Week starts on"
+                value={settings.weekStart}
+                onChange={(weekStart) => set({ weekStart })}
+                options={[
+                  { value: 1, label: 'Monday' },
+                  { value: 0, label: 'Sunday' },
+                ]}
+              />
+            </div>
+            <div className="ms-field">
               <span>Default time for new posts</span>
-              <input type="time" value={settings.defaultTime} onChange={(e) => e.target.value && set({ defaultTime: e.target.value })} />
-            </label>
+              <TimeField label="Default time" value={settings.defaultTime} onChange={(defaultTime) => set({ defaultTime })} />
+            </div>
           </div>
         ) : null}
 

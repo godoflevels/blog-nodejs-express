@@ -96,7 +96,7 @@ export function StudioProvider({ children }) {
     view: urlInit.view,
     calMode:
       urlInit.mode ||
-      (CAL_MODES.includes(store.get('modshub:calMode', '')) ? store.get('modshub:calMode', '') : window.matchMedia('(max-width: 767px)').matches ? 'list' : 'month'),
+      (CAL_MODES.includes(store.get('modshub:calMode', '')) ? store.get('modshub:calMode', '') : 'month'),
     cursor: urlInit.date || todayKey(zoneForInit),
     selectedId: urlInit.post,
     editorMode: ['markdown', 'rich', 'split'].includes(store.get('modshub:editorMode', '')) ? store.get('modshub:editorMode', '') : 'split',

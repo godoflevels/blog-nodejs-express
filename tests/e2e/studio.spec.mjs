@@ -22,6 +22,14 @@ const type = async (page, text) => {
 };
 const bootstrap = async (page) => (await page.request.get('/modshub/api/bootstrap')).json();
 
+// Date fields are month-grid popovers, not native inputs.
+const pickDate = async (page, label, date) => {
+  await page.getByRole('button', { name: new RegExp(`^${label}:`) }).click();
+  const day = page.locator(`.ms-pop [data-date="${date}"]`);
+  for (let i = 0; i < 36 && (await day.count()) === 0; i += 1) await page.getByRole('button', { name: 'Next month' }).click();
+  await day.first().click();
+};
+
 test('requires login and redirects to the admin page', async ({ page, context }) => {
   await context.clearCookies();
   await page.goto('/modshub');
@@ -340,7 +348,7 @@ test('import a Discohook / webhook JSON as a draft with its embeds', async ({ pa
   await page.getByRole('button', { name: 'Import' }).first().click();
   const webhook = { content: 'Hello from **Discohook**', embeds: [{ title: 'Embed title', description: 'desc', color: 5814783 }] };
   await page.getByTestId('import-file').setInputFiles({ name: 'message.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(webhook)) });
-  await page.locator('.ms-import__fields input[type=date]').fill('2026-11-05');
+  await pickDate(page, 'Post date', '2026-11-05');
   await page.getByRole('button', { name: 'Import 1 post' }).click();
   await expect(page.getByText('Import finished')).toBeVisible();
   const data = await bootstrap(page);
@@ -353,7 +361,7 @@ test('import a markdown file as a draft and pick its date', async ({ page }) => 
   await page.getByRole('button', { name: 'Import' }).first().click();
   await page.getByTestId('import-file').setInputFiles({ name: 'my_new-post.md', mimeType: 'text/markdown', buffer: Buffer.from('# From file\n\n**ok**') });
   await expect(page.locator('input[type=text]').first()).toHaveValue('my new-post');
-  await page.locator('.ms-import__fields input[type=date]').fill('2026-11-05');
+  await pickDate(page, 'Post date', '2026-11-05');
   await page.getByRole('button', { name: 'Import 1 post' }).click();
   await expect(page.getByText('Import finished')).toBeVisible();
   const data = await bootstrap(page);
@@ -489,3 +497,118 @@ for (const width of [320, 360, 375, 390, 414, 768, 1024, 1280, 1440]) {
     expect(await overflow()).toBeLessThanOrEqual(0);
   });
 }
+
+test('sidebar: status and category filters, counts and the mini calendar', async ({ page }) => {
+  await login(page, 'tester', 12);
+  const side = page.getByRole('complementary', { name: 'Calendar sidebar' });
+  await expect(side).toBeVisible();
+  await expect(side.getByRole('button', { name: /^All posts\s*12$/ })).toBeVisible();
+  await expect(page.locator('.ms-chip').first()).toBeVisible();
+  await side.getByRole('button', { name: /^Planned/ }).click();
+  await expect(page.locator('.ms-chip').first()).toBeVisible();
+  await expect(page.locator('.ms-chip:not(.ms-chip--planned)')).toHaveCount(0);
+  await side.getByRole('button', { name: /^Planned/ }).click();
+  await expect(page.locator('.ms-chip:not(.ms-chip--planned)').first()).toBeVisible();
+  const title = page.getByTestId('month-title');
+  const before = await title.innerText();
+  await side.getByRole('button', { name: 'Next month' }).click();
+  await expect(title).not.toHaveText(before);
+});
+
+test('schedule chips: date, time, status and category are set with pickers and persist', async ({ page }) => {
+  await login(page);
+  await newPost(page);
+  await expect(page.getByRole('button', { name: /^Scheduled date:/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Scheduled date:/ }).click();
+  await page.getByRole('button', { name: 'Next month' }).click();
+  await page.locator('.ms-pop [data-date$="-15"]').first().click();
+  await expect(page.getByRole('button', { name: /^Scheduled date: .*15/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Scheduled time:/ }).click();
+  const time = page.getByLabel('Time (HH:MM)');
+  await time.fill('09:45');
+  await time.press('Enter');
+  await expect(page.getByRole('button', { name: 'Scheduled time: 09:45' })).toBeVisible();
+  await page.getByRole('button', { name: /^Status:/ }).click();
+  await page.getByRole('option', { name: 'Ready' }).click();
+  await page.getByRole('button', { name: /^Category:/ }).click();
+  await page.getByRole('option', { name: 'Graphics' }).click();
+  await expect(page.locator('.ms-save')).toContainText('Saved', { timeout: 6000 });
+  const post = (await bootstrap(page)).posts[0];
+  expect(post.status).toBe('ready');
+  expect(post.category).toBe('graphics');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Scheduled time: 09:45' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Status: Ready/ })).toBeVisible();
+});
+
+test('the title is edited right in the editor header', async ({ page }) => {
+  await login(page);
+  await newPost(page);
+  await page.getByLabel('Internal title').fill('Launch day teaser');
+  await expect(page.locator('.ms-save')).toContainText('Saved', { timeout: 6000 });
+  expect((await bootstrap(page)).posts[0].title).toBe('Launch day teaser');
+});
+
+test('phone: tab bar, new-post sheet, editor tabs and back', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, 'tester', 8);
+  await expect(page.locator('.ms-rail')).toHaveCount(0);
+  await expect(page.getByRole('tablist', { name: 'View' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Posts' }).click();
+  await expect(page.locator('.ms-card')).toHaveCount(8);
+  await page.getByRole('tab', { name: 'Calendar' }).click();
+  await page.getByTestId('new-post').click();
+  await expect(page.locator('.ms-pop.is-sheet')).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Blank draft' }).click();
+  await expect(page.locator('.ms-editor')).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Post sections' })).toBeVisible();
+  await type(page, 'Typed on a phone **bold**');
+  await page.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.locator('.dc-root strong')).toHaveText('bold');
+  await page.getByRole('tab', { name: 'Export' }).click();
+  await expect(page.getByTestId('download-image')).toBeVisible();
+  await page.getByRole('tab', { name: 'Edit' }).click();
+  await page.getByTestId('back').click();
+  await expect(page.locator('.ms-calendar')).toBeVisible();
+  await expect(page.getByTestId('new-post')).toBeVisible();
+});
+
+test('phone: the filters sheet narrows the posts list and Reset brings them back', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, 'tester', 12);
+  await page.getByRole('tab', { name: 'Posts' }).click();
+  await expect(page.locator('.ms-card')).toHaveCount(12);
+  await page.getByTestId('filters').click();
+  await expect(page.locator('.ms-pop.is-sheet')).toBeVisible();
+  await page.getByRole('radio', { name: 'Planned' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.ms-card')).toHaveCount(3);
+  await page.getByTestId('filters').click();
+  await page.getByRole('button', { name: 'Reset' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.ms-card')).toHaveCount(12);
+});
+
+test('phone: tapping a day in the month shows its posts and swiping pages the month', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, baseURL: 'http://127.0.0.1:4173' });
+  const page = await ctx.newPage();
+  await login(page, 'tester', 12);
+  const title = page.getByTestId('month-title');
+  const start = await title.innerText();
+  const cells = page.locator('.ms-cell:not(.is-outside)');
+  await cells.nth(10).tap();
+  await expect(cells.nth(10)).toHaveClass(/is-picked/);
+  await expect(page.locator('.ms-agenda')).toBeVisible();
+  const box = await page.locator('.ms-month__grid').boundingBox();
+  await page.evaluate(({ x, y }) => {
+    const target = document.querySelector('.ms-calendar__body');
+    const touch = (type, cx) => {
+      const t = new Touch({ identifier: 1, target, clientX: cx, clientY: y });
+      target.dispatchEvent(new TouchEvent(type, { touches: type === 'touchend' ? [] : [t], changedTouches: [t], bubbles: true }));
+    };
+    touch('touchstart', x + 250);
+    touch('touchend', x + 40);
+  }, { x: box.x, y: box.y + 60 });
+  await expect(title).not.toHaveText(start);
+  await ctx.close();
+});

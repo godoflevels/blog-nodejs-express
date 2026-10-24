@@ -1,15 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { IconButton, useOutsideClose } from '../ui.jsx';
+import { IconButton } from '../ui.jsx';
 import { wallParts } from '../../core/time.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Jump straight to any month; months that hold posts or free places carry a dot. */
-export default function MonthPicker({ cursor, onPick, onClose }) {
+export default function MonthPicker({ cursor, onPick }) {
   const { posts, slotsView, displayZone } = useStudio();
-  const ref = useRef(null);
-  useOutsideClose(ref, onClose, true);
   const [year, setYear] = useState(Number(cursor.slice(0, 4)));
   const currentMonth = Number(cursor.slice(5, 7));
   const currentYear = Number(cursor.slice(0, 4));
@@ -28,7 +26,7 @@ export default function MonthPicker({ cursor, onPick, onClose }) {
   }, [posts, slotsView, displayZone]);
 
   return (
-    <div className="ms-monthpicker" ref={ref} role="dialog" aria-label="Choose a month">
+    <div className="ms-monthpicker">
       <div className="ms-monthpicker__year">
         <IconButton icon="chevronLeft" label="Previous year" onClick={() => setYear((y) => y - 1)} />
         <strong>{year}</strong>

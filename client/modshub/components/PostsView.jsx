@@ -1,19 +1,15 @@
 import { useMemo } from 'react';
 import { useStudio } from '../state/StudioContext.jsx';
 import { Button, EmptyState, Icon, Menu, StatusPill } from './ui.jsx';
+import { EMPTY_FILTERS, FiltersButton, SearchField, activeFilterCount } from './Filters.jsx';
+import SaveIndicator from './SaveIndicator.jsx';
 import { CategoryTag } from './calendar/shared.jsx';
 import { PostRowMenu } from './calendar/ListView.jsx';
 import { wallParts, formatDayShort } from '../core/time.js';
 import { buildExport, stringifyExport } from '../core/json-io.js';
+import { snippet } from '../core/snippet.js';
 import { downloadText } from '../core/filenames.js';
 import { STATUS_META, STATUS_ORDER } from '../constants.js';
-
-const SORTS = [
-  ['date-asc', 'Publication date: earliest first'],
-  ['date-desc', 'Publication date: latest first'],
-  ['modified-desc', 'Last modified: newest first'],
-  ['modified-asc', 'Last modified: oldest first'],
-];
 
 export default function PostsView() {
   const { ui, setUi, filteredPosts, posts, categories, categoryById, displayZone, actions, toast } = useStudio();
@@ -22,7 +18,7 @@ export default function PostsView() {
   const selected = useMemo(() => new Set(ui.selection), [ui.selection]);
   const visibleIds = filteredPosts.map((p) => p.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
-  const anyFilter = f.q || f.status !== 'all' || f.category !== 'all' || f.from || f.to;
+  const anyFilter = activeFilterCount(f, true) > 0;
 
   const toggle = (id) =>
     setUi((p) => ({ selection: p.selection.includes(id) ? p.selection.filter((x) => x !== id) : [...p.selection, id] }));
@@ -35,37 +31,13 @@ export default function PostsView() {
 
   return (
     <section className="ms-posts" aria-label="All posts">
-      <header className="ms-posts__filters">
-        <label className="ms-field ms-field--inline">
-          <span>Category</span>
-          <select value={f.category} onChange={(e) => setFilter({ category: e.target.value })}>
-            <option value="all">All categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="ms-field ms-field--inline">
-          <span>From</span>
-          <input type="date" value={f.from} max={f.to || undefined} onChange={(e) => setFilter({ from: e.target.value })} />
-        </label>
-        <label className="ms-field ms-field--inline">
-          <span>To</span>
-          <input type="date" value={f.to} min={f.from || undefined} onChange={(e) => setFilter({ to: e.target.value })} />
-        </label>
-        <label className="ms-field ms-field--inline ms-field--grow">
-          <span>Sort</span>
-          <select value={f.sort} onChange={(e) => setFilter({ sort: e.target.value })}>
-            {SORTS.map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
-        </label>
-        {anyFilter ? (
-          <Button variant="ghost" size="sm" icon="x" onClick={() => setFilter({ q: '', status: 'all', category: 'all', from: '', to: '' })}>
-            Clear filters
-          </Button>
-        ) : null}
+      <header className="ms-posts__head">
+        <h1>Posts</h1>
+        <div className="ms-posts__tools">
+          <SearchField className="ms-posts__search" />
+          <FiltersButton full />
+          <SaveIndicator />
+        </div>
       </header>
 
       <div className="ms-posts__bar">
@@ -106,7 +78,7 @@ export default function PostsView() {
             posts.length === 0 ? (
               <Button variant="primary" icon="plus" onClick={() => actions.createPost()}>Create the first post</Button>
             ) : (
-              <Button variant="soft" onClick={() => setFilter({ q: '', status: 'all', category: 'all', from: '', to: '' })}>Clear filters</Button>
+              <Button variant="soft" onClick={() => setFilter(EMPTY_FILTERS)}>Clear filters</Button>
             )
           }
         >
@@ -132,7 +104,7 @@ export default function PostsView() {
                       <CategoryTag id={post.category} />
                     </span>
                     <strong className="ms-card__title">{post.title || 'Untitled'}</strong>
-                    <span className="ms-card__snippet">{post.content.replace(/\s+/g, ' ').slice(0, 160) || 'No text yet'}</span>
+                    <span className="ms-card__snippet">{snippet(post.content, 160) || 'No text yet'}</span>
                     <span className="ms-card__meta">
                       <Icon name="clock" size={14} /> {formatDayShort(w.date)}, {w.time}
                       {post.tags.length ? <span className="ms-card__tags">{post.tags.slice(0, 4).map((t) => `#${t}`).join(' ')}</span> : null}

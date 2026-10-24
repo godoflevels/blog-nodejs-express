@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { Button, IconButton, Icon, Menu, Modal, StatusPill, useMedia } from '../ui.jsx';
+import { Button, IconButton, Icon, Menu, Modal } from '../ui.jsx';
+import SaveIndicator from '../SaveIndicator.jsx';
 import MetaFields from './MetaFields.jsx';
 import { postImages, runImageDownload } from '../../core/download-image.js';
 import MessageComposer from '../discord/MessageComposer.jsx';
@@ -46,8 +47,6 @@ function NameDialog({ title, label, initial, confirmLabel, onSubmit, onClose }) 
 export default function EditorPane({ post, onBack }) {
   const { ui, setUi, actions, conflicts, saveState, toast } = useStudio();
   const [templateDialog, setTemplateDialog] = useState(false);
-  const narrow = useMedia('(max-width: 767px)');
-  const [detailsOpen, setDetailsOpen] = useState(!narrow);
   const mode = ui.editorMode === 'json' ? 'json' : 'message';
   const conflict = Object.prototype.hasOwnProperty.call(conflicts, post.id);
   const edited = useMemo(
@@ -55,38 +54,50 @@ export default function EditorPane({ post, onBack }) {
     [post.revision, post.updatedAt, post.updatedBy]
   );
 
+  const imgCount = postImages(post).length;
   return (
     <section className="ms-editor" aria-label="Post editor">
       <header className="ms-editor__bar">
-        {onBack ? (
-          <Button variant="ghost" size="sm" icon="chevronLeft" onClick={onBack}>
-            Back
-          </Button>
-        ) : null}
-        <div className="ms-editor__crumb">
-          <StatusPill status={post.status} />
-          <span className="ms-editor__saved" title={post.updatedAt}>
+        {onBack ? <IconButton icon="chevronLeft" label="Back" onClick={onBack} data-testid="back" className="ms-editor__back" /> : null}
+        <div className="ms-editor__heading">
+          <input
+            type="text"
+            className="ms-editor__title"
+            aria-label="Internal title"
+            placeholder="Untitled post"
+            value={post.title}
+            maxLength={200}
+            onChange={(e) => actions.updatePost(post.id, { title: e.target.value })}
+            onBlur={(e) => {
+              if (!e.target.value.trim()) actions.updatePost(post.id, { title: 'Untitled post' });
+            }}
+          />
+          <span className="ms-editor__sub" title={post.updatedAt}>
             {saveState.status === 'saving' ? 'Saving…' : edited}
           </span>
         </div>
+        <SaveIndicator className="ms-save--phone-dot ms-editor__save" />
         <Button variant="primary" size="sm" icon="copy" className="ms-editor__copy" data-testid="copy-text" onClick={() => actions.copyPost(post)}>
           Copy text
         </Button>
-        {postImages(post).length ? (
+        {imgCount ? (
           <Button
             variant="soft"
             size="sm"
             icon="download"
+            className="ms-editor__img"
             data-testid="download-image-header"
             onClick={() => runImageDownload(post, toast)}
           >
-            {postImages(post).length > 1 ? `Images (${postImages(post).length})` : 'Image'}
+            {imgCount > 1 ? `Images (${imgCount})` : 'Image'}
           </Button>
         ) : null}
         <Menu
           label="Post actions"
+          title="Post actions"
           trigger={<IconButton icon="more" label="Post actions" />}
           items={[
+            { label: 'Copy text', icon: 'copy', onClick: () => actions.copyPost(post) },
             { label: 'Copy webhook JSON', icon: 'copy', onClick: () => actions.copyPost(post, 'json') },
             { label: 'Duplicate', icon: 'copy', onClick: () => actions.duplicatePost(post.id) },
             { label: 'Save as template…', icon: 'file', onClick: () => setTemplateDialog(true) },
@@ -118,10 +129,7 @@ export default function EditorPane({ post, onBack }) {
           </div>
         ) : null}
 
-        <details className="ms-details" open={detailsOpen} onToggle={(e) => setDetailsOpen(e.currentTarget.open)}>
-          <summary>Schedule and details</summary>
-          <MetaFields post={post} />
-        </details>
+        <MetaFields post={post} />
 
         <div className="ms-editor__modes">
           <div className="ms-seg" role="tablist" aria-label="Editing mode">

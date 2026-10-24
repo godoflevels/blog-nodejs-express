@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StudioProvider, useStudio } from './state/StudioContext.jsx';
-import TopBar from './components/TopBar.jsx';
+import AppRail from './components/AppRail.jsx';
+import { BrowseTabbar, NewPostFab } from './components/MobileNav.jsx';
 import CalendarView from './components/calendar/CalendarView.jsx';
 import ListView from './components/calendar/ListView.jsx';
 import PostsView from './components/PostsView.jsx';
@@ -10,6 +11,7 @@ import QuickActions from './components/preview/QuickActions.jsx';
 import ImportDialog from './components/dialogs/ImportDialog.jsx';
 import SettingsDialog from './components/dialogs/SettingsDialog.jsx';
 import FreeSlotDialog from './components/dialogs/FreeSlotDialog.jsx';
+import SaveIndicator from './components/SaveIndicator.jsx';
 import { Button, ConfirmDialog, EmptyState, Icon, IconButton, Toasts, useMedia } from './components/ui.jsx';
 
 function Banner() {
@@ -38,7 +40,71 @@ function Browse() {
   return ui.view === 'posts' ? <PostsView /> : <CalendarView />;
 }
 
-function Workspace() {
+/** Top bar of the preview and export screens on phones (the editor has its own). */
+function PhoneBar({ title, onBack }) {
+  return (
+    <header className="ms-phonebar">
+      <IconButton icon="chevronLeft" label="Back" onClick={onBack} />
+      <strong>{title}</strong>
+      <SaveIndicator className="ms-save--dot" />
+    </header>
+  );
+}
+
+function PhoneWorkspace({ post, onImport, onSettings }) {
+  const { ui, setUi } = useStudio();
+  if (!post) {
+    return (
+      <main className="ms-main ms-main--phone">
+        <div className="ms-main__pane ms-main__pane--browse">
+          <Browse />
+        </div>
+        <NewPostFab />
+        <BrowseTabbar onImport={onImport} onSettings={onSettings} />
+      </main>
+    );
+  }
+  const tab = ['edit', 'preview', 'export'].includes(ui.mobileTab) ? ui.mobileTab : 'edit';
+  const back = () => setUi({ selectedId: null, mobileTab: 'edit' });
+  let content;
+  if (tab === 'preview') {
+    content = (
+      <>
+        <PhoneBar title={post.title || 'Untitled'} onBack={back} />
+        <PreviewPane post={post} showExport={false} tabs={['preview', 'raw', 'plain']} />
+      </>
+    );
+  } else if (tab === 'export') {
+    content = (
+      <>
+        <PhoneBar title={post.title || 'Untitled'} onBack={back} />
+        <PreviewPane post={post} showExport forcedTab="image" />
+      </>
+    );
+  } else {
+    content = <EditorPane post={post} onBack={back} />;
+  }
+  return (
+    <main className="ms-main ms-main--phone ms-main--editing">
+      <div className="ms-main__pane">{content}</div>
+      {tab === 'edit' || tab === 'preview' ? <QuickActions post={post} /> : null}
+      <nav className="ms-tabbar ms-tabbar--edit" role="tablist" aria-label="Post sections">
+        {[
+          ['edit', 'Edit', 'edit'],
+          ['preview', 'Preview', 'eye'],
+          ['export', 'Export', 'download'],
+        ].map(([id, label, icon]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setUi({ mobileTab: id })}>
+            <Icon name={icon} size={22} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+    </main>
+  );
+}
+
+function Workspace({ onImport, onSettings }) {
   const s = useStudio();
   const { ui, setUi, selectedPost: post, filteredPosts } = s;
   const wide = useMedia('(min-width: 1280px)');
@@ -49,6 +115,9 @@ function Workspace() {
   useEffect(() => {
     if (ui.selectedId && !post && s.phase === 'ready') setUi({ selectedId: null });
   }, [ui.selectedId, post, s.phase, setUi]);
+
+  // Phones and small tablets: one screen at a time, like an app.
+  if (!mid) return <PhoneWorkspace post={post} onImport={onImport} onSettings={onSettings} />;
 
   if (!post) {
     return (
@@ -61,35 +130,6 @@ function Workspace() {
   const split = ui.editorMode === 'split';
   const showList = wide && (!split || xwide);
   const showRight = ui.showPreview;
-
-  // Phones and small tablets: one pane at a time.
-  if (!mid) {
-    const tab = ui.mobileTab;
-    let content;
-    if (tab === 'browse') content = <Browse />;
-    else if (tab === 'preview') content = <PreviewPane post={post} showExport={false} tabs={['preview', 'raw', 'plain']} />;
-    else if (tab === 'export') content = <PreviewPane post={post} showExport forcedTab="image" />;
-    else content = <EditorPane post={post} onBack={() => setUi({ mobileTab: 'browse' })} />;
-    return (
-      <main className="ms-main ms-main--tabs">
-        <div className="ms-main__pane">{content}</div>
-        {tab === 'edit' || tab === 'preview' ? <QuickActions post={post} /> : null}
-        <nav className="ms-tabbar" aria-label="Sections">
-          {[
-            ['browse', 'Calendar', ui.view === 'posts' ? 'list' : 'calendar'],
-            ['edit', 'Edit', 'edit'],
-            ['preview', 'Preview', 'eye'],
-            ['export', 'Export', 'download'],
-          ].map(([id, label, icon]) => (
-            <button key={id} type="button" aria-current={tab === id ? 'page' : undefined} className={tab === id ? 'is-active' : ''} onClick={() => setUi({ mobileTab: id })}>
-              <Icon name={icon} size={20} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </nav>
-      </main>
-    );
-  }
 
   const cols = [showList ? 'list' : null, 'editor', showRight ? 'right' : null].filter(Boolean);
   return (
@@ -129,6 +169,7 @@ function Workspace() {
 function Shell() {
   const s = useStudio();
   const [dialog, setDialog] = useState(null);
+  const mid = useMedia('(min-width: 900px)');
 
   // Ctrl/Cmd+S flushes autosave immediately.
   useEffect(() => {
@@ -165,11 +206,15 @@ function Shell() {
     );
   }
 
+  const openImport = () => setDialog('import');
+  const openSettings = () => setDialog('settings');
   return (
-    <div className="ms-app" data-user={s.userName}>
-      <TopBar onImport={() => setDialog('import')} onSettings={() => setDialog('settings')} />
-      <Banner />
-      <Workspace />
+    <div className={`ms-app ${mid ? 'has-rail' : ''}`} data-user={s.userName}>
+      {mid ? <AppRail onImport={openImport} onSettings={openSettings} /> : null}
+      <div className="ms-app__main">
+        <Banner />
+        <Workspace onImport={openImport} onSettings={openSettings} />
+      </div>
       {dialog === 'import' ? <ImportDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'settings' ? <SettingsDialog onClose={() => setDialog(null)} /> : null}
       <FreeSlotDialog />

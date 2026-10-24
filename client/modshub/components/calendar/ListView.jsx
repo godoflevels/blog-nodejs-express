@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
-import { formatDayLong, todayKey } from '../../core/time.js';
+import { formatDayLong, formatDayShort, todayKey } from '../../core/time.js';
 import { Button, EmptyState, Icon, IconButton, Menu, StatusDot } from '../ui.jsx';
 import { STATUS_META, STATUS_ORDER } from '../../constants.js';
+import { snippet } from '../../core/snippet.js';
 import { CategoryTag, useDayGroups, useSlotGroups } from './shared.jsx';
 
 export function PostRowMenu({ post }) {
@@ -31,9 +32,10 @@ export function PostRowMenu({ post }) {
 }
 
 function Row({ post, time, selected, onOpen, compact }) {
-  const preview = useMemo(() => post.content.replace(/\s+/g, ' ').slice(0, 140), [post.content]);
+  const { categoryById } = useStudio();
+  const preview = useMemo(() => snippet(post.content, 140), [post.content]);
   return (
-    <div className={`ms-row ${selected ? 'is-selected' : ''} ${compact ? 'is-compact' : ''}`}>
+    <div className={`ms-row ${selected ? 'is-selected' : ''} ${compact ? 'is-compact' : ''}`} style={{ '--cat': categoryById(post.category).color }}>
       <button type="button" className="ms-row__main" onClick={() => onOpen(post.id)}>
         <span className="ms-row__time">{time}</span>
         <StatusDot status={post.status} size={9} />
@@ -80,9 +82,9 @@ export function DayAgenda({ date, items, free = [], onCreate, onToggleFree, onOp
   return (
     <section className="ms-agenda" aria-label={`Posts on ${formatDayLong(date)}`}>
       <header>
-        <h3>{formatDayLong(date)}</h3>
+        <h3>{formatDayShort(date)}</h3>
         <span className="ms-agenda__actions">
-          <Button variant="ghost" size="sm" icon="star" onClick={onToggleFree}>{allDay ? 'Unmark free' : 'Mark free'}</Button>
+          <Button variant={allDay ? 'soft' : 'ghost'} size="sm" icon="star" className={allDay ? 'ms-btn--free-on' : ''} onClick={onToggleFree}>{allDay ? 'Unmark free' : 'Mark free'}</Button>
           <Button variant="soft" size="sm" icon="plus" onClick={onCreate}>New</Button>
         </span>
       </header>

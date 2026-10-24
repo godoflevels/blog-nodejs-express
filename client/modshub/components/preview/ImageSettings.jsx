@@ -1,4 +1,5 @@
 import { useStudio } from '../../state/StudioContext.jsx';
+import { Select } from '../ui.jsx';
 import { BACKGROUNDS, IMAGE_PRESETS, MAX_SIDE } from '../../core/image-export.js';
 
 export default function ImageSettings({ options, hasImage }) {
@@ -6,16 +7,10 @@ export default function ImageSettings({ options, hasImage }) {
   const set = (patch) => actions.saveSettings({ imageExport: { ...(settings.imageExport || {}), ...patch } });
   return (
     <div className="ms-imgset">
-      <label className="ms-field">
+      <div className="ms-field">
         <span>Size</span>
-        <select value={options.preset} onChange={(e) => set({ preset: e.target.value })}>
-          {Object.entries(IMAGE_PRESETS).map(([id, p]) => (
-            <option key={id} value={id}>
-              {p.label}{id === 'custom' ? '' : ` — ${p.width} × ${p.height}`}
-            </option>
-          ))}
-        </select>
-      </label>
+        <Select label="Size" value={options.preset} onChange={(preset) => set({ preset })} options={Object.entries(IMAGE_PRESETS).map(([id, p]) => ({ value: id, label: `${p.label}${id === 'custom' ? '' : ` — ${p.width} × ${p.height}`}` }))} />
+      </div>
       {options.preset === 'custom' ? (
         <div className="ms-imgset__row">
           <label className="ms-field">
@@ -28,35 +23,34 @@ export default function ImageSettings({ options, hasImage }) {
           </label>
         </div>
       ) : null}
-      <label className="ms-field">
+      <div className="ms-field">
         <span>Long text</span>
-        <select value={options.layout} onChange={(e) => set({ layout: e.target.value })}>
-          <option value="slides">Several slides (split at paragraphs)</option>
-          <option value="long">One long image</option>
-        </select>
-      </label>
-      <label className="ms-field">
+        <Select label="Long text" value={options.layout} onChange={(layout) => set({ layout })} options={[{ value: 'slides', label: 'Several slides (split at paragraphs)' }, { value: 'long', label: 'One long image' }]} />
+      </div>
+      <div className="ms-field">
         <span>Background</span>
-        <select value={options.background} onChange={(e) => set({ background: e.target.value })}>
-          {Object.entries(BACKGROUNDS).map(([id, b]) => (
-            <option key={id} value={id}>{b.label}</option>
-          ))}
-        </select>
-      </label>
+        <Select label="Background" value={options.background} onChange={(background) => set({ background })} options={Object.entries(BACKGROUNDS).map(([id, b]) => ({ value: id, label: b.label }))} />
+      </div>
       {options.background === 'solid' ? (
         <label className="ms-field">
           <span>Colour</span>
           <input type="color" value={options.solidColor} onChange={(e) => set({ solidColor: e.target.value })} />
         </label>
       ) : null}
-      <label className="ms-field">
+      <div className="ms-field" aria-disabled={!hasImage}>
         <span>Artwork</span>
-        <select value={options.imageMode} onChange={(e) => set({ imageMode: e.target.value })} disabled={!hasImage}>
-          <option value="design">Use the image in the design</option>
-          <option value="background">Image as background (with overlay)</option>
-          <option value="none">Text only</option>
-        </select>
-      </label>
+        <Select
+          label="Artwork"
+          disabled={!hasImage}
+          value={hasImage ? options.imageMode : 'none'}
+          onChange={(imageMode) => hasImage && set({ imageMode })}
+          options={[
+            { value: 'design', label: 'Use the image in the design' },
+            { value: 'background', label: 'Image as background (with overlay)' },
+            { value: 'none', label: 'Text only' },
+          ]}
+        />
+      </div>
       <label className="ms-field">
         <span>Padding — {Math.round(options.padding * 100)}%</span>
         <input type="range" min={0.03} max={0.12} step={0.01} value={options.padding} onChange={(e) => set({ padding: Number(e.target.value) })} />

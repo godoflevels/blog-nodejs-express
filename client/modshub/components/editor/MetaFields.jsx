@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { useStudio } from '../../state/StudioContext.jsx';
 import { STATUS_META, STATUS_ORDER } from '../../constants.js';
 import { fromWall, wallParts, listZones, formatDayShort } from '../../core/time.js';
-import { Icon } from '../ui.jsx';
+import { Icon, Select } from '../ui.jsx';
+import { DateField, TimeField } from '../pickers.jsx';
 
 function TagsInput({ tags, onChange }) {
   const [draft, setDraft] = useState('');
@@ -66,64 +67,29 @@ export default function MetaFields({ post }) {
     actions.updatePost(post.id, { scheduledAt: res.iso, timezone: zone });
   };
 
-  const hasCategory = categories.some((c) => c.id === post.category);
+  const statusOptions = STATUS_ORDER.map((s) => ({ value: s, label: STATUS_META[s].label, color: STATUS_META[s].color }));
+  const categoryOptions = categories.map((c) => ({ value: c.id, label: c.name, color: c.color }));
+  if (!categories.some((c) => c.id === post.category)) {
+    categoryOptions.unshift({ value: post.category, label: post.category || 'Uncategorised', color: '#6a6e73' });
+  }
+  const zoneOptions = zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }));
 
   return (
     <div className="ms-meta">
-      <label className="ms-field ms-meta__title">
-        <span>Internal title</span>
-        <input
-          type="text"
-          value={post.title}
-          maxLength={200}
-          onChange={(e) => actions.updatePost(post.id, { title: e.target.value })}
-          onBlur={(e) => {
-            if (!e.target.value.trim()) actions.updatePost(post.id, { title: 'Untitled post' });
-          }}
-        />
-      </label>
-
-      <label className="ms-field">
-        <span>Scheduled date</span>
-        <input type="date" value={wall.date} onChange={(e) => setWall(e.target.value, wall.time)} />
-      </label>
-      <label className="ms-field">
-        <span>Scheduled time</span>
-        <input type="time" value={wall.time} step={60} onChange={(e) => setWall(wall.date, e.target.value)} />
-      </label>
-      <label className="ms-field ms-meta__zone">
-        <span>Timezone</span>
-        <select value={post.timezone} onChange={(e) => setWall(wall.date, wall.time, e.target.value)}>
-          {zones.map((z) => (
-            <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>
-          ))}
-        </select>
-      </label>
+      <div className="ms-meta__chips">
+        <Select variant="chip" label="Status" value={post.status} options={statusOptions} onChange={(status) => actions.updatePost(post.id, { status })} />
+        <DateField variant="chip" label="Scheduled date" value={wall.date} onChange={(date) => setWall(date, wall.time)} />
+        <TimeField variant="chip" label="Scheduled time" value={wall.time} onChange={(time) => setWall(wall.date, time)} />
+        <Select variant="chip" icon="globe" label="Timezone" searchable value={post.timezone} options={zoneOptions} onChange={(zone) => setWall(wall.date, wall.time, zone)} />
+        <Select variant="chip" label="Category" value={post.category} options={categoryOptions} onChange={(category) => actions.updatePost(post.id, { category })} />
+      </div>
       {differs ? (
         <p className="ms-hint ms-meta__note">
           <Icon name="clock" size={14} /> That is {formatDayShort(inDisplay.date)}, {inDisplay.time} in the calendar timezone ({displayZone}).
         </p>
       ) : null}
-
-      <label className="ms-field">
-        <span>Status</span>
-        <select value={post.status} onChange={(e) => actions.updatePost(post.id, { status: e.target.value })}>
-          {STATUS_ORDER.map((s) => (
-            <option key={s} value={s}>{STATUS_META[s].label}</option>
-          ))}
-        </select>
-      </label>
-      <label className="ms-field">
-        <span>Category</span>
-        <select value={post.category} onChange={(e) => actions.updatePost(post.id, { category: e.target.value })}>
-          {!hasCategory ? <option value={post.category}>{post.category || 'Uncategorised'}</option> : null}
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      </label>
-      <div className="ms-field ms-meta__tags">
-        <span>Tags</span>
+      <div className="ms-meta__tags">
+        <Icon name="tag" size={16} />
         <TagsInput tags={post.tags} onChange={(tags) => actions.updatePost(post.id, { tags })} />
       </div>
     </div>
